@@ -117,18 +117,35 @@ public class MaxMindMinFraudService {
      * @param ipAddress User's IP address (required)
      * @param email User's email address (optional)
      * @param deviceSessionId MaxMind device tracking session ID (optional)
+     * @param userAgent User-Agent header from HTTP request (optional)
+     * @param acceptLanguage Accept-Language header from HTTP request (optional)
+     * @param keycloakSessionId Keycloak authentication session ID for transaction tracking (optional)
      * @return FraudCheckResult containing risk score and response data
      */
-    public FraudCheckResult checkFraud(String ipAddress, String email, String deviceSessionId) {
+    public FraudCheckResult checkFraud(String ipAddress, String email, String deviceSessionId,
+                                       String userAgent, String acceptLanguage, String keycloakSessionId) {
         try {
             logger.debugf("Performing fraud check for IP: %s, Email: %s", ipAddress, email != null ? email : "none");
 
+            // Build the device object
+            Device.Builder deviceBuilder = new Device.Builder(InetAddress.getByName(ipAddress));
+
+            if (deviceSessionId != null && !deviceSessionId.isEmpty()) {
+                deviceBuilder.sessionId(deviceSessionId);
+            }
+
+            if (userAgent != null && !userAgent.isEmpty()) {
+                deviceBuilder.userAgent(userAgent);
+                logger.debugf("Added User-Agent to request: %s", userAgent);
+            }
+
+            if (acceptLanguage != null && !acceptLanguage.isEmpty()) {
+                deviceBuilder.acceptLanguage(acceptLanguage);
+                logger.debugf("Added Accept-Language to request: %s", acceptLanguage);
+            }
+
             // Build the transaction request
-            Transaction.Builder transactionBuilder = new Transaction.Builder(
-                    new Device.Builder(InetAddress.getByName(ipAddress))
-                            .sessionId(deviceSessionId)
-                            .build()
-            );
+            Transaction.Builder transactionBuilder = new Transaction.Builder(deviceBuilder.build());
 
             // Add email if provided
             if (email != null && !email.isEmpty()) {
@@ -136,9 +153,19 @@ public class MaxMindMinFraudService {
             }
 
             // Add event details
-            transactionBuilder.event(new Event.Builder()
-                    .transactionId(java.util.UUID.randomUUID().toString())
-                    .build());
+            Event.Builder eventBuilder = new Event.Builder()
+                    .type(Event.Type.ACCOUNT_LOGIN);
+
+            // Use Keycloak session ID as transaction ID for correlation, fallback to UUID
+            if (keycloakSessionId != null && !keycloakSessionId.isEmpty()) {
+                eventBuilder.transactionId(keycloakSessionId);
+                logger.debugf("Using Keycloak session ID as transaction ID: %s", keycloakSessionId);
+            } else {
+                eventBuilder.transactionId(java.util.UUID.randomUUID().toString());
+                logger.debugf("No Keycloak session ID provided, using random UUID as transaction ID");
+            }
+
+            transactionBuilder.event(eventBuilder.build());
 
             Transaction transaction = transactionBuilder.build();
 

@@ -13,6 +13,7 @@ import org.keycloak.models.UserModel;
 
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -172,8 +173,31 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                     connectTimeout, readTimeout);
 
             try {
-                // Call MaxMind API
-                MaxMindMinFraudService.FraudCheckResult result = service.checkFraud(ipAddress, email, deviceSessionId);
+                // Extract HTTP headers for enhanced fraud detection
+                String userAgent = null;
+                String acceptLanguage = null;
+
+                try {
+                    List<String> userAgentList = context.getHttpRequest()
+                            .getHttpHeaders().getRequestHeader("User-Agent");
+                    if (userAgentList != null && !userAgentList.isEmpty()) {
+                        userAgent = userAgentList.get(0);
+                        logger.debugf("Extracted User-Agent header: %s", userAgent);
+                    }
+
+                    List<String> acceptLanguageList = context.getHttpRequest()
+                            .getHttpHeaders().getRequestHeader("Accept-Language");
+                    if (acceptLanguageList != null && !acceptLanguageList.isEmpty()) {
+                        acceptLanguage = acceptLanguageList.get(0);
+                        logger.debugf("Extracted Accept-Language header: %s", acceptLanguage);
+                    }
+                } catch (Exception e) {
+                    logger.warnf(e, "Error extracting HTTP headers, continuing without them");
+                }
+
+                // Call MaxMind API with all available parameters
+                MaxMindMinFraudService.FraudCheckResult result = service.checkFraud(
+                        ipAddress, email, deviceSessionId, userAgent, acceptLanguage, sessionId);
 
                 if (result.isSuccess()) {
                     double riskScore = result.getRiskScore();

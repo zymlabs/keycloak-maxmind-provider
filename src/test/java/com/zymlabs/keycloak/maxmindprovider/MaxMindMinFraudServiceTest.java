@@ -74,7 +74,7 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isTrue();
@@ -96,7 +96,7 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isTrue();
@@ -116,7 +116,7 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isTrue();
@@ -137,7 +137,7 @@ class MaxMindMinFraudServiceTest {
         // When
         MaxMindMinFraudService.FraudCheckResult result =
                 service.checkFraud(MaxMindTestData.TEST_IP_CLEAN,
-                        MaxMindTestData.TEST_EMAIL_CLEAN, null);
+                        MaxMindTestData.TEST_EMAIL_CLEAN, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isTrue();
@@ -155,7 +155,7 @@ class MaxMindMinFraudServiceTest {
         // When
         MaxMindMinFraudService.FraudCheckResult result =
                 service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null,
-                        MaxMindTestData.TEST_DEVICE_ID_CLEAN);
+                        MaxMindTestData.TEST_DEVICE_ID_CLEAN, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isTrue();
@@ -171,7 +171,7 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_INVALID, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_INVALID, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isFalse();
@@ -190,7 +190,7 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isFalse();
@@ -208,11 +208,65 @@ class MaxMindMinFraudServiceTest {
 
         // When
         MaxMindMinFraudService.FraudCheckResult result =
-                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null);
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null, null, null, null);
 
         // Then
         assertThat(result.isSuccess()).isFalse();
         assertThat(result.getErrorMessage()).contains("API error");
+    }
+
+    @Test
+    @DisplayName("Check fraud with User-Agent should include it in request")
+    void testCheckFraud_WithUserAgent() throws Exception {
+        // Given
+        when(mockClient.score(any(Transaction.class))).thenReturn(mockScoreResponse);
+        MaxMindMinFraudService service = new MaxMindMinFraudService(mockClient,
+                MaxMindMinFraudService.ServiceLevel.SCORE);
+
+        // When
+        MaxMindMinFraudService.FraudCheckResult result =
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null,
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/91.0", null, null);
+
+        // Then
+        assertThat(result.isSuccess()).isTrue();
+        verify(mockClient).score(any(Transaction.class));
+    }
+
+    @Test
+    @DisplayName("Check fraud with Accept-Language should include it in request")
+    void testCheckFraud_WithAcceptLanguage() throws Exception {
+        // Given
+        when(mockClient.score(any(Transaction.class))).thenReturn(mockScoreResponse);
+        MaxMindMinFraudService service = new MaxMindMinFraudService(mockClient,
+                MaxMindMinFraudService.ServiceLevel.SCORE);
+
+        // When
+        MaxMindMinFraudService.FraudCheckResult result =
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null,
+                        null, "en-US,en;q=0.9", null);
+
+        // Then
+        assertThat(result.isSuccess()).isTrue();
+        verify(mockClient).score(any(Transaction.class));
+    }
+
+    @Test
+    @DisplayName("Check fraud with Keycloak session ID should set it as transaction ID")
+    void testCheckFraud_WithKeycloakSessionId() throws Exception {
+        // Given
+        when(mockClient.score(any(Transaction.class))).thenReturn(mockScoreResponse);
+        MaxMindMinFraudService service = new MaxMindMinFraudService(mockClient,
+                MaxMindMinFraudService.ServiceLevel.SCORE);
+
+        // When
+        MaxMindMinFraudService.FraudCheckResult result =
+                service.checkFraud(MaxMindTestData.TEST_IP_CLEAN, null, null,
+                        null, null, "keycloak-session-123");
+
+        // Then
+        assertThat(result.isSuccess()).isTrue();
+        verify(mockClient).score(any(Transaction.class));
     }
 
     @Test
