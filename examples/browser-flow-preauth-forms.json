@@ -1,0 +1,38 @@
+{
+  "alias": "Browser with MaxMind Pre-Auth Forms",
+  "description": "Pre-authentication fraud detection flow",
+  "providerId": "basic-flow",
+  "topLevel": false,
+  "builtIn": false,
+  "authenticationExecutions": [
+    {
+      "authenticator": "maxmind-minfraud-authenticator",
+      "authenticatorFlow": false,
+      "requirement": "REQUIRED",
+      "priority": 10,
+      "userSetupAllowed": false,
+      "authenticatorConfig": "maxmind-preauth-config"
+    },
+    {
+      "authenticator": "auth-username-password-form",
+      "authenticatorFlow": false,
+      "requirement": "REQUIRED",
+      "priority": 20,
+      "userSetupAllowed": false
+    },
+    {
+      "authenticator": "maxmind-preauth-correlator",
+      "authenticatorFlow": false,
+      "requirement": "REQUIRED",
+      "priority": 30,
+      "userSetupAllowed": false
+    },
+    {
+      "authenticatorFlow": true,
+      "requirement": "CONDITIONAL",
+      "priority": 40,
+      "flowAlias": "Browser Pre-Auth OTP",
+      "userSetupAllowed": false
+    }
+  ]
+}

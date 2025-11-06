@@ -8,10 +8,12 @@ A Keycloak authentication extension that integrates MaxMind minFraud fraud detec
 ## Features
 
 - **Fraud Detection**: Integrate MaxMind minFraud API (Score, Insights, or Factors) into Keycloak authentication
+- **Pre-Authentication Mode**: Run fraud checks before username/password entry to block suspicious IPs early
 - **IP Allowlist/Blocklist**: Filter authentication by IP address or CIDR ranges with support for IPv4 and IPv6
 - **Device Tracking**: Optional MaxMind Device Tracking for enhanced device fingerprinting
 - **Risk-Based Actions**: Configurable actions based on risk levels (Allow, Challenge with MFA, or Block)
 - **MFA Enforcement**: Block users without MFA during suspicious logins to prevent attackers from setting up OTP during fraud attempts
+- **Session Correlation**: Automatically correlate pre-auth fraud checks with user accounts after login
 - **Per-Realm Configuration**: Different settings for each Keycloak realm
 - **Dual Logging**: Store fraud check results in both database (long-term analytics) and Keycloak events (short-term audit)
 - **Event Integration**: Automatic logging to Keycloak's event system for real-time monitoring and compliance
@@ -209,6 +211,33 @@ When enabled, MaxMind Device Tracking adds browser/device fingerprinting:
 3. Session ID is sent to minFraud API for enhanced fraud detection
 4. MaxMind tracks device history across login attempts
 
+### Pre-Authentication Mode (Optional)
+
+The MaxMind authenticator supports running **before** username/password authentication to block suspicious IPs early.
+
+**How it works:**
+1. MaxMind check runs before login form (IP-only fraud detection)
+2. High-risk IPs are blocked before credential entry
+3. After successful login, **Pre-Auth Correlator** updates records with user info
+4. Complete audit trail maintained via session-based correlation
+
+**Flow structure:**
+```
+MaxMind minFraud → Username/Password → Pre-Auth Correlator → MFA Enforcer → OTP
+```
+
+**Benefits:**
+- Block malicious IPs before they see the login form
+- Prevent credential enumeration attacks
+- Reduce server load from bot attacks
+- Maintain full audit trail with session correlation
+
+**Trade-offs:**
+- Less accurate without user email/account data
+- Relies primarily on IP reputation and device tracking
+
+**Setup:** Place MaxMind authenticator before username/password in your flow, and add the Pre-Auth Correlator after login for audit trail correlation.
+
 ### MFA Enforcement for Suspicious Logins
 
 The **MaxMind MFA Enforcer** authenticator provides an additional security layer when fraud is detected. It prevents attackers from bypassing security by setting up MFA during a fraudulent login attempt.
@@ -218,12 +247,16 @@ The **MaxMind MFA Enforcer** authenticator provides an additional security layer
   - Users **with** MFA configured → Prompted for MFA verification
   - Users **without** MFA configured → Login blocked with security message
 
+**Supports both modes:**
+- Post-auth challenges (after username/password)
+- Pre-auth challenges (before username/password, enforced after login)
+
 **Benefits:**
 - Prevents attackers from gaining access by simply setting up OTP during fraud attempt
 - Encourages proactive MFA adoption
 - Provides clear audit trail of blocked attempts
 
-**Setup:** Add the "MaxMind MFA Enforcer" authenticator to your flow between the fraud detector and MFA step. See [CONFIGURATION.md](docs/CONFIGURATION.md#mfa-enforcer-configuration) for detailed setup and configuration options.
+**Setup:** Add the "MaxMind MFA Enforcer" authenticator to your flow between the fraud detector and MFA step (works with both pre-auth and post-auth modes). See [CONFIGURATION.md](docs/CONFIGURATION.md#mfa-enforcer-configuration) for detailed setup and configuration options.
 
 ## Querying Fraud Check Results
 

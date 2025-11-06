@@ -5,7 +5,7 @@
     <#elseif section = "form">
     <form id="kc-maxmind-form" method="post" action="${url.loginAction}">
         <div style="text-align: center; padding: 40px 20px;">
-            <h2 style="margin-bottom: 16px; font-size: 24px;">Verifying Security</h2>
+            <#--  <h2 style="margin-bottom: 16px; font-size: 24px;">Verifying Security</h2>  -->
             <p style="color: #6c757d; margin-bottom: 24px; font-size: 16px;">
                 Please wait while we verify your login...
             </p>

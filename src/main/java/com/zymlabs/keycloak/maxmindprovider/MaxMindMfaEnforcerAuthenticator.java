@@ -16,11 +16,15 @@ import jakarta.ws.rs.core.Response;
  * Enforces MFA requirement when MaxMind fraud detection triggers CHALLENGE action.
  *
  * This authenticator:
- * 1. Checks if MaxMind set the "maxmind_challenge" auth note
+ * 1. Checks if MaxMind set "maxmind_challenge" or "maxmind_preauth_challenge" auth notes
  * 2. If no challenge, allows authentication to proceed
  * 3. If challenge exists, verifies user has at least one configured MFA credential
  * 4. Blocks users without MFA (prevents OTP setup during suspicious login)
  * 5. Allows users with MFA to proceed to MFA verification step
+ *
+ * Supports both post-auth and pre-auth challenge flags:
+ * - maxmind_challenge: Set when fraud check runs after username/password
+ * - maxmind_preauth_challenge: Set when fraud check runs before username/password
  *
  * Configuration:
  * - mfaCredentialTypes: Comma-separated list of credential types to check
@@ -30,7 +34,7 @@ import jakarta.ws.rs.core.Response;
  * Flow Structure:
  * Browser Forms
  * ├── Username Password Form (REQUIRED)
- * ├── MaxMind minFraud (REQUIRED) ← Sets maxmind_challenge auth note
+ * ├── MaxMind minFraud (REQUIRED) ← Sets challenge auth note
  * ├── MaxMind MFA Enforcer (REQUIRED) ← This authenticator
  * └── Conditional OTP (CONDITIONAL) ← Only executes if user has MFA
  */
@@ -46,10 +50,14 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
 
     @Override
     public void authenticate(AuthenticationFlowContext context) {
-        // Check if MaxMind set the challenge auth note
-        String challengeNote = context.getAuthenticationSession().getAuthNote("maxmind_challenge");
+        // Check if MaxMind set either post-auth or pre-auth challenge auth note
+        String postAuthChallenge = context.getAuthenticationSession().getAuthNote("maxmind_challenge");
+        String preAuthChallenge = context.getAuthenticationSession().getAuthNote("maxmind_preauth_challenge");
 
-        if (!"true".equals(challengeNote)) {
+        boolean isChallenged = "true".equals(postAuthChallenge) || "true".equals(preAuthChallenge);
+        boolean isPreAuthChallenge = "true".equals(preAuthChallenge);
+
+        if (!isChallenged) {
             // No challenge from MaxMind - skip MFA enforcement
             logger.debugf("No MaxMind challenge detected, allowing authentication to proceed");
             context.success();
@@ -58,10 +66,12 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
 
         // Challenge detected - check if user has MFA configured
         UserModel user = context.getUser();
-        String riskScore = context.getAuthenticationSession().getAuthNote("maxmind_risk_score");
+        String riskScore = isPreAuthChallenge
+                ? context.getAuthenticationSession().getAuthNote("maxmind_preauth_risk_score")
+                : context.getAuthenticationSession().getAuthNote("maxmind_risk_score");
 
-        logger.infof("MaxMind CHALLENGE triggered for user %s (risk_score=%s), verifying MFA configuration",
-                     user.getUsername(), riskScore);
+        logger.infof("MaxMind CHALLENGE triggered for user %s (risk_score=%s, pre_auth=%b), verifying MFA configuration",
+                     user.getUsername(), riskScore, isPreAuthChallenge);
 
         // Get configured MFA credential types
         String mfaTypes = getMfaCredentialTypes(context);
@@ -90,6 +100,7 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
                     .detail("maxmind_mfa_enforcer_decision", "ALLOWED")
                     .detail("maxmind_mfa_enforcer_type", configuredType)
                     .detail("maxmind_mfa_enforcer_risk_score", riskScore != null ? riskScore : "unknown")
+                    .detail("maxmind_mfa_enforcer_mode", isPreAuthChallenge ? "PRE_AUTH" : "POST_AUTH")
                     .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer")
                     .success(); // Explicitly persist event
 
@@ -105,6 +116,7 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
                     .detail("maxmind_mfa_enforcer_reason", "No MFA configured")
                     .detail("maxmind_mfa_enforcer_risk_score", riskScore != null ? riskScore : "unknown")
                     .detail("maxmind_mfa_enforcer_checked_types", mfaTypes)
+                    .detail("maxmind_mfa_enforcer_mode", isPreAuthChallenge ? "PRE_AUTH" : "POST_AUTH")
                     .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer")
                     .error("maxmind_mfa_not_configured"); // Explicitly persist error event
 

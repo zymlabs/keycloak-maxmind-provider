@@ -1,0 +1,23 @@
+{
+  "alias": "Browser Pre-Auth OTP",
+  "description": "OTP conditional flow",
+  "providerId": "basic-flow",
+  "topLevel": false,
+  "builtIn": false,
+  "authenticationExecutions": [
+    {
+      "authenticator": "conditional-user-configured",
+      "authenticatorFlow": false,
+      "requirement": "REQUIRED",
+      "priority": 10,
+      "userSetupAllowed": false
+    },
+    {
+      "authenticator": "auth-otp-form",
+      "authenticatorFlow": false,
+      "requirement": "REQUIRED",
+      "priority": 20,
+      "userSetupAllowed": false
+    }
+  ]
+}

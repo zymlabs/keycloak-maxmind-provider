@@ -108,4 +108,52 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="maxmind-minfraud-1.2.0" author="zymlabs">
+        <comment>Add pre-authentication mode support</comment>
+
+        <!-- Make user_id nullable to support pre-auth checks -->
+        <dropNotNullConstraint tableName="maxmind_minfraud_check" columnName="user_id"/>
+
+        <!-- Add session_id for correlation -->
+        <addColumn tableName="maxmind_minfraud_check">
+            <column name="session_id" type="VARCHAR(255)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add flag to identify pre-auth checks -->
+        <addColumn tableName="maxmind_minfraud_check">
+            <column name="is_pre_auth" type="BOOLEAN" defaultValueBoolean="false">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+
+        <!-- Add timestamp for when correlation happened -->
+        <addColumn tableName="maxmind_minfraud_check">
+            <column name="correlated_at" type="TIMESTAMP">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <!-- Add index on session_id for fast correlation lookups -->
+        <createIndex indexName="idx_session_id" tableName="maxmind_minfraud_check">
+            <column name="session_id"/>
+        </createIndex>
+
+        <!-- Add composite index for pre-auth correlation queries -->
+        <createIndex indexName="idx_preauth_session" tableName="maxmind_minfraud_check">
+            <column name="is_pre_auth"/>
+            <column name="session_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_preauth_session" tableName="maxmind_minfraud_check"/>
+            <dropIndex indexName="idx_session_id" tableName="maxmind_minfraud_check"/>
+            <dropColumn tableName="maxmind_minfraud_check" columnName="correlated_at"/>
+            <dropColumn tableName="maxmind_minfraud_check" columnName="is_pre_auth"/>
+            <dropColumn tableName="maxmind_minfraud_check" columnName="session_id"/>
+            <addNotNullConstraint tableName="maxmind_minfraud_check" columnName="user_id"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

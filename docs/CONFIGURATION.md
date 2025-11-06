@@ -852,7 +852,7 @@ MFA Enforcer: Skipped (no challenge note)
 Result: Login succeeds without MFA
 ```
 
-**Scenario 2: Medium Risk - User Has MFA**
+**Scenario 2: Medium Risk - User Has MFA (Post-Auth Mode)**
 ```
 User: alice@example.com
 Risk Score: 50 (MEDIUM)
@@ -862,7 +862,7 @@ MFA Enforcer: Allows authentication to continue
 Result: User prompted for OTP, login succeeds after MFA
 ```
 
-**Scenario 3: Medium Risk - User Does NOT Have MFA**
+**Scenario 3: Medium Risk - User Does NOT Have MFA (Post-Auth Mode)**
 ```
 User: attacker@example.com
 Risk Score: 60 (MEDIUM)
@@ -882,6 +882,18 @@ MFA Enforcer: Never reached
 Result: Login fails at MaxMind authenticator before MFA check
 ```
 
+**Scenario 5: Medium Risk Pre-Auth - User Has MFA**
+```
+IP: 203.0.113.50
+Risk Score: 55 (MEDIUM) - Pre-auth check
+Action: CHALLENGE
+Username entered: alice@example.com
+Has OTP: Yes
+MFA Enforcer: Detects pre-auth challenge, allows authentication to continue
+Result: User prompted for OTP, login succeeds after MFA
+Mode: PRE_AUTH (logged in event)
+```
+
 ### Event Logging
 
 The MFA Enforcer logs detailed events to Keycloak's event system:
@@ -891,6 +903,7 @@ The MFA Enforcer logs detailed events to Keycloak's event system:
 maxmind_mfa_enforcer_decision: ALLOWED
 maxmind_mfa_enforcer_type: otp
 maxmind_mfa_enforcer_risk_score: 45.50
+maxmind_mfa_enforcer_mode: POST_AUTH
 auth_method: maxmind_mfa_enforcer
 ```
 
@@ -900,8 +913,20 @@ maxmind_mfa_enforcer_decision: BLOCKED
 maxmind_mfa_enforcer_reason: No MFA configured
 maxmind_mfa_enforcer_risk_score: 65.00
 maxmind_mfa_enforcer_checked_types: otp,webauthn
+maxmind_mfa_enforcer_mode: POST_AUTH
 auth_method: maxmind_mfa_enforcer
 ```
+
+**Pre-Auth Mode Event (Allowed with MFA)**:
+```
+maxmind_mfa_enforcer_decision: ALLOWED
+maxmind_mfa_enforcer_type: webauthn
+maxmind_mfa_enforcer_risk_score: 55.00
+maxmind_mfa_enforcer_mode: PRE_AUTH
+auth_method: maxmind_mfa_enforcer
+```
+
+**Note**: The `maxmind_mfa_enforcer_mode` field indicates whether the challenge originated from pre-auth or post-auth fraud detection.
 
 ### Error Messages
 

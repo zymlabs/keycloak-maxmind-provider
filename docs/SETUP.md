@@ -217,11 +217,17 @@ DESCRIBE maxmind_minfraud_check;  -- MySQL
 
 ### Step 3: Add MaxMind Authenticator
 
+The MaxMind minFraud authenticator can be positioned in two ways:
+
+#### Option A: Post-Authentication Mode (Recommended)
+
+Run fraud check **after** username/password authentication (knows user identity):
+
 1. In your new flow, click **Add execution**
 2. Select **MaxMind minFraud** from the dropdown
 3. Click **Add**
 4. Set the requirement to **REQUIRED**
-5. Use the up/down arrows to position it after "Username Password Form"
+5. Use the up/down arrows to position it **after** "Username Password Form"
 
 Your flow should look like:
 ```
@@ -230,9 +236,59 @@ Browser with MaxMind
 ├── Kerberos (DISABLED)
 └── Browser with MaxMind Forms (ALTERNATIVE)
     ├── Username Password Form (REQUIRED)
-    ├── MaxMind minFraud (REQUIRED)
+    ├── MaxMind minFraud (REQUIRED)          ← Post-auth: Knows user email
     └── OTP Form (CONDITIONAL)
 ```
+
+**Benefits**:
+- More accurate risk scores (includes user email)
+- Can correlate with user's historical login patterns
+- Better for medium-risk CHALLENGE actions
+
+#### Option B: Pre-Authentication Mode (Advanced)
+
+Run fraud check **before** username/password to block suspicious IPs early:
+
+1. In your new flow, click **Add execution**
+2. Select **MaxMind minFraud** from the dropdown
+3. Click **Add**
+4. Set the requirement to **REQUIRED**
+5. Position it **before** "Username Password Form"
+6. **IMPORTANT**: Add the **MaxMind Pre-Auth Correlator** after username/password
+
+Your flow should look like:
+```
+Browser with MaxMind
+├── Cookie (ALTERNATIVE)
+├── Kerberos (DISABLED)
+└── Browser with MaxMind Forms (ALTERNATIVE)
+    ├── MaxMind minFraud (REQUIRED)              ← Pre-auth: IP-only check
+    ├── Username Password Form (REQUIRED)
+    ├── MaxMind Pre-Auth Correlator (REQUIRED)   ← Links check to user
+    └── OTP Form (CONDITIONAL)
+```
+
+**Benefits**:
+- Blocks malicious IPs before they can enter credentials
+- Prevents credential enumeration attacks
+- Reduces load on authentication backend for bot traffic
+- Protects against brute-force attacks
+
+**Trade-offs**:
+- Less accurate (no user email for MaxMind)
+- Cannot use CHALLENGE action effectively (user not yet identified)
+- Best used with ALLOW/BLOCK actions only
+
+**When to use Pre-Auth**:
+- High bot/brute-force attack volume
+- Protecting against credential stuffing
+- Want to block known malicious IPs immediately
+- Security over user experience
+
+**When to use Post-Auth**:
+- Normal security requirements
+- Want to use CHALLENGE (MFA) for medium-risk logins
+- Need accurate risk scores with user context
 
 **Note**: If you plan to use MFA enforcement for suspicious logins, add the MaxMind MFA Enforcer in Step 5 before configuring risk actions.
 
@@ -304,12 +360,14 @@ Browser with MaxMind
 
 If you configured **Medium Risk Action** to **CHALLENGE**, add the MFA Enforcer to prevent attackers from setting up MFA during fraudulent login attempts.
 
-1. In your flow, click **Add execution** after "MaxMind minFraud"
+**Note**: The MFA Enforcer works with **both** post-auth and pre-auth modes. It checks for auth notes set by MaxMind in either position.
+
+1. In your flow, click **Add execution** after "MaxMind minFraud" (or after "MaxMind Pre-Auth Correlator" if using pre-auth mode)
 2. Select **MaxMind MFA Enforcer** from the dropdown
 3. Click **Add**
 4. Set the requirement to **REQUIRED**
 
-Your flow should now look like:
+**Post-Auth Flow** (recommended for CHALLENGE actions):
 ```
 Browser with MaxMind
 ├── Cookie (ALTERNATIVE)
@@ -320,6 +378,21 @@ Browser with MaxMind
     ├── MaxMind MFA Enforcer (REQUIRED)       ← Blocks users without MFA
     └── OTP Form (CONDITIONAL)
 ```
+
+**Pre-Auth Flow** (less useful for CHALLENGE):
+```
+Browser with MaxMind
+├── Cookie (ALTERNATIVE)
+├── Kerberos (DISABLED)
+└── Browser with MaxMind Forms (ALTERNATIVE)
+    ├── MaxMind minFraud (REQUIRED)
+    ├── Username Password Form (REQUIRED)
+    ├── MaxMind Pre-Auth Correlator (REQUIRED)
+    ├── MaxMind MFA Enforcer (REQUIRED)       ← Checks pre-auth challenge flag
+    └── OTP Form (CONDITIONAL)
+```
+
+**Important**: Pre-auth mode is best used with BLOCK action for high-risk IPs. CHALLENGE is less useful in pre-auth since the user hasn't been identified yet.
 
 #### Configure MFA Enforcer (Optional)
 

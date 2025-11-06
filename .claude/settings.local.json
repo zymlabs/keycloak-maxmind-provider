@@ -22,7 +22,10 @@
       "Bash(javap:*)",
       "Bash(docker-compose restart:*)",
       "Bash(git mv:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(mvn clean compile:*)",
+      "Bash(mvn test:*)"
     ],
     "deny": [],
     "ask": []

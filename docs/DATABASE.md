@@ -22,10 +22,10 @@ Stores all fraud check results for auditing and analytics.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | BIGINT | NO | Primary key, auto-increment |
-| `user_id` | VARCHAR(36) | NO | Keycloak user ID (UUID) |
+| `user_id` | VARCHAR(36) | **YES** | Keycloak user ID (UUID), null for pre-auth checks |
 | `realm_id` | VARCHAR(36) | NO | Keycloak realm ID (UUID) |
-| `username` | VARCHAR(255) | YES | Username at time of check |
-| `email` | VARCHAR(255) | YES | Email at time of check |
+| `username` | VARCHAR(255) | YES | Username at time of check, null for pre-auth |
+| `email` | VARCHAR(255) | YES | Email at time of check, null for pre-auth |
 | `ip_address` | VARCHAR(45) | NO | User's IP address (IPv4 or IPv6) |
 | `timestamp` | TIMESTAMP | NO | When fraud check occurred |
 | `risk_score` | DOUBLE | NO | MaxMind risk score (0-100, or -1 for errors) |
@@ -36,6 +36,11 @@ Stores all fraud check results for auditing and analytics.
 | `service_level` | VARCHAR(20) | YES | SCORE, INSIGHTS, or FACTORS |
 | `error_message` | TEXT | YES | Error message if API call failed |
 | `event_id` | VARCHAR(36) | YES | Keycloak event ID for direct correlation |
+| **`session_id`** | **VARCHAR(255)** | **YES** | **Session ID for pre-auth correlation** |
+| **`is_pre_auth`** | **BOOLEAN** | **NO** | **True if fraud check ran before user login** |
+| **`correlated_at`** | **TIMESTAMP** | **YES** | **When pre-auth check was linked to user** |
+
+**Schema Version**: 1.2.0 (added pre-authentication support)
 
 ### Indexes
 
@@ -44,6 +49,8 @@ Stores all fraud check results for auditing and analytics.
 - `idx_timestamp`: Index on `timestamp` for date range queries
 - `idx_user_timestamp`: Composite index on `(user_id, timestamp)` for user history queries
 - `idx_event_id`: Index on `event_id` for direct event correlation
+- **`idx_session_id`**: Index on `session_id` for pre-auth lookup
+- **`idx_preauth_session`**: Composite index on `(is_pre_auth, session_id)` for pre-auth queries
 
 ### Storage Estimates
 
@@ -135,6 +142,99 @@ FROM maxmind_minfraud_check
 WHERE error_message IS NOT NULL
   AND timestamp > NOW() - INTERVAL '7 days'
 ORDER BY timestamp DESC;
+```
+
+### Pre-Authentication Checks
+
+#### View Pre-Auth Checks (Before Correlation)
+
+```sql
+-- Pre-auth checks not yet linked to users
+SELECT
+    id,
+    timestamp,
+    ip_address,
+    session_id,
+    risk_score,
+    decision,
+    correlated_at
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND user_id IS NULL
+ORDER BY timestamp DESC
+LIMIT 20;
+```
+
+#### View Correlated Pre-Auth Checks
+
+```sql
+-- Pre-auth checks that were successfully linked to users
+SELECT
+    timestamp as check_time,
+    ip_address,
+    risk_score,
+    decision,
+    username,
+    email,
+    correlated_at,
+    EXTRACT(EPOCH FROM (correlated_at - timestamp)) as correlation_delay_seconds
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND user_id IS NOT NULL
+ORDER BY timestamp DESC
+LIMIT 20;
+```
+
+#### View All Checks for a Session
+
+```sql
+-- All fraud checks (pre-auth and post-auth) for a specific session
+SELECT
+    timestamp,
+    is_pre_auth,
+    ip_address,
+    user_id,
+    username,
+    email,
+    risk_score,
+    decision
+FROM maxmind_minfraud_check
+WHERE session_id = 'your-session-id-here'
+ORDER BY timestamp;
+```
+
+#### Correlation Statistics
+
+```sql
+-- Pre-auth correlation success rate
+SELECT
+    DATE(timestamp) as date,
+    COUNT(*) as total_preauth_checks,
+    COUNT(CASE WHEN user_id IS NOT NULL THEN 1 END) as correlated,
+    COUNT(CASE WHEN user_id IS NULL THEN 1 END) as uncorrelated,
+    ROUND(COUNT(CASE WHEN user_id IS NOT NULL THEN 1 END) * 100.0 / COUNT(*), 2) as correlation_rate
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND timestamp > NOW() - INTERVAL '30 days'
+GROUP BY DATE(timestamp)
+ORDER BY date DESC;
+```
+
+#### Pre-Auth vs Post-Auth Comparison
+
+```sql
+-- Compare risk scores between pre-auth and post-auth modes
+SELECT
+    CASE WHEN is_pre_auth THEN 'Pre-Auth' ELSE 'Post-Auth' END as mode,
+    COUNT(*) as total_checks,
+    AVG(risk_score) FILTER (WHERE risk_score >= 0) as avg_risk_score,
+    COUNT(CASE WHEN decision = 'ALLOWED' THEN 1 END) as allowed,
+    COUNT(CASE WHEN decision = 'CHALLENGED' THEN 1 END) as challenged,
+    COUNT(CASE WHEN decision = 'BLOCKED' THEN 1 END) as blocked
+FROM maxmind_minfraud_check
+WHERE timestamp > NOW() - INTERVAL '7 days'
+GROUP BY is_pre_auth
+ORDER BY mode;
 ```
 
 ## Analytics Queries

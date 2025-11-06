@@ -55,6 +55,12 @@ class MaxMindMinFraudAuthenticatorEventTest {
     @Mock
     private org.keycloak.events.Event event;
 
+    @Mock
+    private org.keycloak.sessions.AuthenticationSessionModel authSession;
+
+    @Mock
+    private org.keycloak.sessions.RootAuthenticationSessionModel parentSession;
+
     private MaxMindMinFraudAuthenticator authenticator;
     private Map<String, String> config;
 
@@ -91,6 +97,11 @@ class MaxMindMinFraudAuthenticatorEventTest {
         when(user.getUsername()).thenReturn("testuser");
         when(user.getEmail()).thenReturn("test@example.com");
         when(realm.getId()).thenReturn("realm-123");
+
+        // Mock authentication session for pre-auth support
+        when(context.getAuthenticationSession()).thenReturn(authSession);
+        when(authSession.getParentSession()).thenReturn(parentSession);
+        when(parentSession.getId()).thenReturn("session-123");
 
         // Mock connection method calls
         lenient().when(context.getConnection()).thenReturn(mock(org.keycloak.common.ClientConnection.class, RETURNS_DEEP_STUBS));
@@ -266,9 +277,9 @@ class MaxMindMinFraudAuthenticatorEventTest {
      * Test requiresUser method
      */
     @Test
-    @DisplayName("Authenticator requires user to be set")
+    @DisplayName("Authenticator does not require user (supports pre-auth mode)")
     void testRequiresUser() {
-        assertThat(authenticator.requiresUser()).isTrue();
+        assertThat(authenticator.requiresUser()).isFalse();
     }
 
     /**

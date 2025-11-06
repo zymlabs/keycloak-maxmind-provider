@@ -108,23 +108,32 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
     /**
      * Perform the actual fraud check.
+     * Supports both pre-auth mode (user is null) and post-auth mode (user is identified).
      */
     private void performFraudCheck(AuthenticationFlowContext context, String deviceSessionId) {
         UserModel user = context.getUser();
-        String ipAddress = context.getConnection().getRemoteAddr();
-        String email = user.getEmail();
-        String userId = user.getId();
-        String realmId = context.getRealm().getId();
+        boolean isPreAuth = (user == null);
 
-        logger.infof("Performing fraud check for user %s (ID: %s) from IP: %s",
-                     user.getUsername(), userId, ipAddress);
+        String ipAddress = context.getConnection().getRemoteAddr();
+        String email = isPreAuth ? null : user.getEmail();
+        String userId = isPreAuth ? null : user.getId();
+        String username = isPreAuth ? null : user.getUsername();
+        String realmId = context.getRealm().getId();
+        String sessionId = context.getAuthenticationSession().getParentSession().getId();
+
+        // Log differently based on mode
+        if (isPreAuth) {
+            logger.infof("Performing pre-authentication fraud check from IP: %s, session: %s", ipAddress, sessionId);
+        } else {
+            logger.infof("Performing fraud check for user %s (ID: %s) from IP: %s", username, userId, ipAddress);
+        }
 
         // Check IP allowlist/blocklist before calling MaxMind API
         IpFilterResult ipFilterResult = checkIpFilter(context, ipAddress);
         if (ipFilterResult.shouldSkipMaxMind()) {
             // IP filter made a decision - skip MaxMind check
             handleIpFilterDecision(context, ipFilterResult, userId, realmId,
-                    user.getUsername(), email, ipAddress, deviceSessionId);
+                    username, email, ipAddress, deviceSessionId, isPreAuth, sessionId);
             return; // Early exit
         }
 
@@ -187,15 +196,16 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                             .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
                     // Take action based on risk level (this calls terminal methods and persists events)
-                    handleRiskAction(context, action, riskScore);
+                    handleRiskAction(context, action, riskScore, isPreAuth);
 
                     // Retrieve event ID (available after terminal method)
                     String eventId = context.getEvent().getEvent().getId();
 
                     // Store fraud check result with event ID
-                    storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
+                    storeFraudCheck(context, userId, realmId, username, email, ipAddress,
                                   riskScore, action.name(), deviceSessionId, result.getRequestId(),
-                                  result.getRawResponse(), serviceLevel.name(), null, eventId);
+                                  result.getRawResponse(), serviceLevel.name(), null, eventId,
+                                  sessionId, isPreAuth);
 
                 } else {
                     // API call failed
@@ -225,9 +235,9 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                     String eventId = context.getEvent().getEvent().getId();
 
                     // Store error with event ID
-                    storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
+                    storeFraudCheck(context, userId, realmId, username, email, ipAddress,
                                   -1.0, "ERROR", deviceSessionId, null, null, serviceLevel.name(),
-                                  result.getErrorMessage(), eventId);
+                                  result.getErrorMessage(), eventId, sessionId, isPreAuth);
                 }
             } finally {
                 service.close();
@@ -242,16 +252,17 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
             String eventId = context.getEvent().getEvent().getId();
 
             // Store error with event ID
-            storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
+            storeFraudCheck(context, userId, realmId, username, email, ipAddress,
                           -1.0, "ERROR", deviceSessionId, null, null, null,
-                          "Configuration error: " + e.getMessage(), eventId);
+                          "Configuration error: " + e.getMessage(), eventId, sessionId, isPreAuth);
         }
     }
 
     /**
      * Handle the risk-based action.
+     * Supports both pre-auth and post-auth modes with different session note keys.
      */
-    private void handleRiskAction(AuthenticationFlowContext context, RiskAction action, double riskScore) {
+    private void handleRiskAction(AuthenticationFlowContext context, RiskAction action, double riskScore, boolean isPreAuth) {
         switch (action) {
             case ALLOW:
                 logger.infof("Risk action: ALLOW - Proceeding with authentication");
@@ -260,29 +271,36 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                 break;
 
             case CHALLENGE:
-                logger.warnf("Risk action: CHALLENGE - Requiring additional authentication (risk_score=%f)", riskScore);
+                logger.warnf("Risk action: CHALLENGE - Requiring additional authentication (risk_score=%f, pre_auth=%b)", riskScore, isPreAuth);
                 // Log event for CHALLENGE action
                 context.getEvent()
                         .detail("maxmind_minfraud_action", "CHALLENGE")
                         .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
+                        .detail("maxmind_minfraud_mode", isPreAuth ? "PRE_AUTH" : "POST_AUTH")
                         .success(); // Explicitly persist event
 
-                // Store auth notes so conditional authenticators can check for CHALLENGE status
-                // Conditional authenticators should check these notes to decide whether to require MFA
-                context.getAuthenticationSession().setAuthNote("maxmind_challenge", "true");
-                context.getAuthenticationSession().setAuthNote("maxmind_risk_score", String.format("%.2f", riskScore));
+                // Store auth notes so MFA enforcer can check for CHALLENGE status
+                // Use different note keys for pre-auth vs post-auth
+                if (isPreAuth) {
+                    context.getAuthenticationSession().setAuthNote("maxmind_preauth_challenge", "true");
+                    context.getAuthenticationSession().setAuthNote("maxmind_preauth_risk_score", String.format("%.2f", riskScore));
+                } else {
+                    context.getAuthenticationSession().setAuthNote("maxmind_challenge", "true");
+                    context.getAuthenticationSession().setAuthNote("maxmind_risk_score", String.format("%.2f", riskScore));
+                }
 
-                // Allow authentication to continue - conditional MFA flows will check auth notes
+                // Allow authentication to continue - MFA enforcer will check auth notes
                 // This generates a LOGIN event (after MFA succeeds) rather than LOGIN_ERROR
                 context.success();
                 break;
 
             case BLOCK:
-                logger.errorf("Risk action: BLOCK - Denying authentication (risk_score=%f)", riskScore);
+                logger.errorf("Risk action: BLOCK - Denying authentication (risk_score=%f, pre_auth=%b)", riskScore, isPreAuth);
                 // Log event for BLOCK action
                 context.getEvent()
                         .detail("maxmind_minfraud_action", "BLOCK")
                         .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
+                        .detail("maxmind_minfraud_mode", isPreAuth ? "PRE_AUTH" : "POST_AUTH")
                         .error("maxmind_high_risk_blocked"); // Explicitly persist error event
                 Response challenge = context.form()
                         .setAttribute("riskScore", String.format("%.2f", riskScore))
@@ -295,12 +313,13 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
     /**
      * Store fraud check result in database.
+     * Supports both pre-auth and post-auth modes.
      */
     private void storeFraudCheck(AuthenticationFlowContext context, String userId, String realmId,
                                 String username, String email, String ipAddress, double riskScore,
                                 String decision, String deviceSessionId, String requestId,
                                 String rawResponse, String serviceLevel, String errorMessage,
-                                String eventId) {
+                                String eventId, String sessionId, boolean isPreAuth) {
         // Check if database recording is enabled
         if (!isRecordFraudChecksEnabled(context)) {
             logger.debugf("Database recording disabled, skipping fraud check storage");
@@ -314,10 +333,10 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                     .getEntityManager();
 
             MaxMindMinFraudCheckEntity entity = new MaxMindMinFraudCheckEntity();
-            entity.setUserId(userId);
+            entity.setUserId(userId);  // Will be null in pre-auth mode
             entity.setRealmId(realmId);
-            entity.setUsername(username);
-            entity.setEmail(email);
+            entity.setUsername(username);  // Will be null in pre-auth mode
+            entity.setEmail(email);  // Will be null in pre-auth mode
             entity.setIpAddress(ipAddress);
             entity.setRiskScore(riskScore);
             entity.setDecision(decision);
@@ -327,9 +346,15 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
             entity.setServiceLevel(serviceLevel);
             entity.setErrorMessage(errorMessage);
             entity.setEventId(eventId);
+            entity.setSessionId(sessionId);
+            entity.setIsPreAuth(isPreAuth);
 
             em.persist(entity);
-            logger.debugf("Fraud check record stored: id=%d, event_id=%s", entity.getId(), eventId);
+            if (isPreAuth) {
+                logger.debugf("Pre-auth fraud check record stored: id=%d, session_id=%s", entity.getId(), sessionId);
+            } else {
+                logger.debugf("Fraud check record stored: id=%d, event_id=%s", entity.getId(), eventId);
+            }
         } catch (Exception e) {
             logger.errorf(e, "Error storing fraud check result");
         }
@@ -379,7 +404,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
     @Override
     public boolean requiresUser() {
-        return true; // This authenticator requires a user to be identified
+        return false; // Support both pre-auth (before login) and post-auth (after login) modes
     }
 
     @Override
@@ -491,30 +516,34 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
      *
      * @param context Authentication flow context
      * @param result IP filter result
-     * @param userId User ID
+     * @param userId User ID (may be null in pre-auth)
      * @param realmId Realm ID
-     * @param username Username
-     * @param email User email
+     * @param username Username (may be null in pre-auth)
+     * @param email User email (may be null in pre-auth)
      * @param ipAddress IP address
      * @param deviceSessionId Device session ID (may be null)
+     * @param isPreAuth Whether this is a pre-auth check
+     * @param sessionId Session ID for correlation
      */
     private void handleIpFilterDecision(AuthenticationFlowContext context, IpFilterResult result,
                                        String userId, String realmId, String username,
-                                       String email, String ipAddress, String deviceSessionId) {
+                                       String email, String ipAddress, String deviceSessionId,
+                                       boolean isPreAuth, String sessionId) {
         // Log event with maxmind_ prefix
         context.getEvent()
                 .detail("maxmind_minfraud_decision", result.getDecision())
                 .detail("maxmind_minfraud_ip_filter", result.getListType())
                 .detail("maxmind_minfraud_ip_address", ipAddress)
+                .detail("maxmind_minfraud_mode", isPreAuth ? "PRE_AUTH" : "POST_AUTH")
                 .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
         // Take action
         if (result.isAllowed()) {
-            logger.infof("IP filter: allowing authentication for %s", ipAddress);
+            logger.infof("IP filter: allowing authentication for %s (pre_auth=%b)", ipAddress, isPreAuth);
             context.getEvent().success(); // Explicitly persist allowlist event
             context.success();
         } else {
-            logger.warnf("IP filter: blocking authentication for %s", ipAddress);
+            logger.warnf("IP filter: blocking authentication for %s (pre_auth=%b)", ipAddress, isPreAuth);
             context.getEvent().error("maxmind_ip_blocklisted"); // Explicitly persist blocklist error event
             Response challenge = context.form()
                     .setAttribute("ipAddress", ipAddress)
@@ -529,7 +558,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
         // Store IP filter result in database
         storeFraudCheck(context, userId, realmId, username, email, ipAddress,
                 -1.0, result.getDecision(), deviceSessionId, null, null,
-                null, null, eventId);
+                null, null, eventId, sessionId, isPreAuth);
     }
 
     /**

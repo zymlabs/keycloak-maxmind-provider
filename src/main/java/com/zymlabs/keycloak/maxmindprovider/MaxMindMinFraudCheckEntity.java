@@ -16,7 +16,9 @@ import java.util.Date;
     @Index(name = "idx_realm_id", columnList = "realm_id"),
     @Index(name = "idx_timestamp", columnList = "timestamp"),
     @Index(name = "idx_user_timestamp", columnList = "user_id,timestamp"),
-    @Index(name = "idx_event_id", columnList = "event_id")
+    @Index(name = "idx_event_id", columnList = "event_id"),
+    @Index(name = "idx_session_id", columnList = "session_id"),
+    @Index(name = "idx_preauth_session", columnList = "is_pre_auth,session_id")
 })
 @NamedQueries({
     @NamedQuery(name = "findByUserId",
@@ -26,7 +28,9 @@ import java.util.Date;
     @NamedQuery(name = "findByUserIdAndDateRange",
                 query = "SELECT e FROM MaxMindMinFraudCheckEntity e WHERE e.userId = :userId AND e.timestamp BETWEEN :startDate AND :endDate ORDER BY e.timestamp DESC"),
     @NamedQuery(name = "findHighRiskByRealm",
-                query = "SELECT e FROM MaxMindMinFraudCheckEntity e WHERE e.realmId = :realmId AND e.riskScore >= :minRiskScore ORDER BY e.timestamp DESC")
+                query = "SELECT e FROM MaxMindMinFraudCheckEntity e WHERE e.realmId = :realmId AND e.riskScore >= :minRiskScore ORDER BY e.timestamp DESC"),
+    @NamedQuery(name = "findBySessionIdPreAuth",
+                query = "SELECT e FROM MaxMindMinFraudCheckEntity e WHERE e.sessionId = :sessionId AND e.isPreAuth = true ORDER BY e.timestamp DESC")
 })
 public class MaxMindMinFraudCheckEntity implements Serializable {
 
@@ -37,7 +41,7 @@ public class MaxMindMinFraudCheckEntity implements Serializable {
     @Column(name = "id")
     private Long id;
 
-    @Column(name = "user_id", nullable = false, length = 36)
+    @Column(name = "user_id", nullable = true, length = 36)
     private String userId;
 
     @Column(name = "realm_id", nullable = false, length = 36)
@@ -80,9 +84,20 @@ public class MaxMindMinFraudCheckEntity implements Serializable {
     @Column(name = "event_id", length = 36)
     private String eventId; // Keycloak event ID for correlation
 
+    @Column(name = "session_id", length = 255)
+    private String sessionId; // Keycloak session ID for pre-auth correlation
+
+    @Column(name = "is_pre_auth", nullable = false)
+    private Boolean isPreAuth = false; // Flag to identify pre-auth checks
+
+    @Column(name = "correlated_at")
+    @Temporal(TemporalType.TIMESTAMP)
+    private Date correlatedAt; // Timestamp when pre-auth check was correlated with user
+
     // Constructors
     public MaxMindMinFraudCheckEntity() {
         this.timestamp = new Date();
+        this.isPreAuth = false;
     }
 
     // Getters and Setters
@@ -204,6 +219,30 @@ public class MaxMindMinFraudCheckEntity implements Serializable {
 
     public void setEventId(String eventId) {
         this.eventId = eventId;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
+    }
+
+    public Boolean getIsPreAuth() {
+        return isPreAuth;
+    }
+
+    public void setIsPreAuth(Boolean isPreAuth) {
+        this.isPreAuth = isPreAuth;
+    }
+
+    public Date getCorrelatedAt() {
+        return correlatedAt;
+    }
+
+    public void setCorrelatedAt(Date correlatedAt) {
+        this.correlatedAt = correlatedAt;
     }
 
     @Override

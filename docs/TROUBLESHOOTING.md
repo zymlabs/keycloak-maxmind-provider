@@ -10,7 +10,9 @@ Common issues and solutions for the Keycloak MaxMind minFraud extension.
 4. [Device Tracking Issues](#device-tracking-issues)
 5. [Performance Issues](#performance-issues)
 6. [False Positives/Negatives](#false-positivesnegatives)
-7. [Event Viewing Issues](#event-viewing-issues)
+7. [MFA Enforcer Issues](#mfa-enforcer-issues)
+8. [Pre-Authentication Mode Issues](#pre-authentication-mode-issues)
+9. [Event Viewing Issues](#event-viewing-issues)
 
 ## Installation Issues
 
@@ -664,6 +666,272 @@ SELECT
     ROUND(100.0 * COUNT(DISTINCT CASE WHEN type IN ('otp', 'webauthn') THEN user_id END) / COUNT(DISTINCT user_id), 2) as mfa_adoption_pct
 FROM user_entity u
 LEFT JOIN credential c ON u.id = c.user_id;
+```
+
+## Pre-Authentication Mode Issues
+
+Pre-authentication mode runs fraud checks before username/password authentication. This section covers issues specific to pre-auth mode.
+
+### Pre-Auth Checks Not Being Stored
+
+**Symptom**: No records in database with `is_pre_auth = true`.
+
+**Check Flow Configuration**:
+
+Go to Authentication → Flows → [Your Flow] and verify MaxMind is positioned **before** Username Password Form:
+
+```
+Correct Pre-Auth Flow:
+├── MaxMind minFraud (REQUIRED)              ← Before username/password
+├── Username Password Form (REQUIRED)
+├── MaxMind Pre-Auth Correlator (REQUIRED)
+└── OTP Form (CONDITIONAL)
+
+Incorrect (Post-Auth):
+├── Username Password Form (REQUIRED)
+├── MaxMind minFraud (REQUIRED)              ← After username/password
+└── OTP Form (CONDITIONAL)
+```
+
+**Check Database**:
+
+```sql
+-- Count pre-auth vs post-auth checks
+SELECT
+    is_pre_auth,
+    COUNT(*) as count
+FROM maxmind_minfraud_check
+WHERE timestamp > NOW() - INTERVAL '1 hour'
+GROUP BY is_pre_auth;
+```
+
+If all checks show `is_pre_auth = false`, MaxMind is positioned after username/password (post-auth mode).
+
+**Check Logs**:
+
+```bash
+grep -i "pre-authentication fraud check" /path/to/keycloak/data/log/keycloak.log | tail -20
+```
+
+You should see:
+```
+Performing pre-authentication fraud check from IP: 203.0.113.50, session: abc-123-def
+```
+
+If you see "Performing fraud check for user testuser" instead, it's running in post-auth mode.
+
+### Pre-Auth Checks Not Being Correlated with Users
+
+**Symptom**: Records with `is_pre_auth = true` and `user_id IS NULL` even after successful logins.
+
+**Check Correlator in Flow**:
+
+Verify **MaxMind Pre-Auth Correlator** is added to the flow **after** Username Password Form:
+
+```
+Correct Flow with Correlator:
+├── MaxMind minFraud (REQUIRED)
+├── Username Password Form (REQUIRED)
+├── MaxMind Pre-Auth Correlator (REQUIRED)   ← Required for correlation
+└── OTP Form (CONDITIONAL)
+```
+
+**Check Logs for Correlation**:
+
+```bash
+grep -i "correlated pre-auth" /path/to/keycloak/data/log/keycloak.log | tail -20
+```
+
+You should see:
+```
+Correlated pre-auth fraud check (id=123, risk_score=45.50) with user alice@example.com
+```
+
+**Check Database**:
+
+```sql
+-- View uncorrelated pre-auth checks
+SELECT
+    id,
+    timestamp,
+    ip_address,
+    session_id,
+    risk_score,
+    decision,
+    user_id,
+    correlated_at
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND user_id IS NULL
+  AND timestamp > NOW() - INTERVAL '1 hour'
+ORDER BY timestamp DESC;
+```
+
+**Common Causes**:
+1. Correlator not added to flow
+2. Correlator set to DISABLED or CONDITIONAL (must be REQUIRED)
+3. User abandoned login after pre-auth check (legitimate uncorrelated records)
+4. Session ID mismatch (rare, but possible)
+
+### Pre-Auth Correlation Delay
+
+**Symptom**: Pre-auth checks being correlated, but with significant delay.
+
+**Check Correlation Timing**:
+
+```sql
+-- Measure correlation delay
+SELECT
+    id,
+    timestamp as check_time,
+    correlated_at,
+    EXTRACT(EPOCH FROM (correlated_at - timestamp)) as delay_seconds,
+    username
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND user_id IS NOT NULL
+  AND timestamp > NOW() - INTERVAL '1 day'
+ORDER BY delay_seconds DESC
+LIMIT 20;
+```
+
+**Expected delay**: < 5 seconds (time between fraud check and user entering credentials)
+
+**If delay > 30 seconds**:
+- User may have entered credentials slowly
+- Network latency issues
+- Keycloak performance issues
+
+**If delay > 5 minutes**:
+- User likely abandoned first login attempt and tried again later
+- Correlation is matching wrong session (rare, investigate `session_id` values)
+
+### MFA Enforcer Not Detecting Pre-Auth Challenge
+
+**Symptom**: MFA Enforcer not blocking users when MaxMind runs in pre-auth mode with CHALLENGE action.
+
+**Important Note**: CHALLENGE action in pre-auth mode is **not recommended** because the user hasn't been identified yet. Pre-auth mode should primarily use ALLOW/BLOCK actions.
+
+**If you still want to use CHALLENGE in pre-auth**:
+
+1. **Verify MFA Enforcer checks both challenge types**:
+
+Check logs for:
+```bash
+grep "maxmind_preauth_challenge\|maxmind_mfa_enforcer_mode" /path/to/keycloak/data/log/keycloak.log | tail -20
+```
+
+You should see:
+```
+MaxMind CHALLENGE triggered for user alice (risk_score=55.00, pre_auth=true), verifying MFA configuration
+```
+
+2. **Check event details**:
+
+```sql
+SELECT details
+FROM event_entity
+WHERE details LIKE '%maxmind_mfa_enforcer_mode=PRE_AUTH%'
+  AND time > EXTRACT(EPOCH FROM NOW() - INTERVAL '1 hour') * 1000
+ORDER BY time DESC LIMIT 5;
+```
+
+3. **Verify flow order**:
+
+MFA Enforcer must come **after** Correlator in pre-auth flows:
+
+```
+Correct Pre-Auth Flow with MFA Enforcer:
+├── MaxMind minFraud (REQUIRED)
+├── Username Password Form (REQUIRED)
+├── MaxMind Pre-Auth Correlator (REQUIRED)   ← Must come before MFA Enforcer
+├── MaxMind MFA Enforcer (REQUIRED)          ← Checks for pre-auth challenge
+└── Conditional OTP (CONDITIONAL)
+```
+
+### Pre-Auth Blocking All Logins
+
+**Symptom**: All logins blocked when using pre-auth mode.
+
+**Check Risk Configuration**:
+
+Go to Authentication → Flows → [Your Flow] → MaxMind minFraud → Config
+
+1. **Verify Low Risk Threshold is reasonable**:
+   - If set to 0, all logins except perfect scores will be medium/high risk
+   - Recommended: 20-30
+
+2. **Verify Low Risk Action**:
+   - Should be **ALLOW** (not BLOCK)
+
+3. **Check if IP is in blocklist**:
+   - Review **IP Blocklist** field
+   - Remove test IPs from blocklist
+
+**Test with Internal IP**:
+
+Internal IPs bypass fraud check by default (in allowlist):
+
+```bash
+# Test from localhost
+curl http://keycloak:8080/realms/[realm]/account
+
+# Check logs
+grep "IP_ALLOWLIST" /path/to/keycloak/data/log/keycloak.log | tail -5
+```
+
+**Check API Errors**:
+
+```sql
+-- View recent API errors in pre-auth mode
+SELECT
+    timestamp,
+    ip_address,
+    error_message,
+    decision
+FROM maxmind_minfraud_check
+WHERE is_pre_auth = true
+  AND error_message IS NOT NULL
+  AND timestamp > NOW() - INTERVAL '1 hour'
+ORDER BY timestamp DESC;
+```
+
+If all checks show API errors:
+- Verify MaxMind credentials
+- Check network connectivity to MaxMind API
+- Verify fail mode (FAIL_OPEN vs FAIL_CLOSED)
+
+### Duplicate Fraud Checks for Same Login
+
+**Symptom**: Two fraud checks (one pre-auth, one post-auth) for same login attempt.
+
+**This may be intentional if you have MaxMind in multiple positions**:
+
+```
+Flow with both modes (not recommended):
+├── MaxMind minFraud (REQUIRED)              ← Pre-auth check
+├── Username Password Form (REQUIRED)
+├── MaxMind Pre-Auth Correlator (REQUIRED)
+├── MaxMind minFraud (REQUIRED)              ← Post-auth check (duplicate!)
+└── OTP Form (CONDITIONAL)
+```
+
+**Solution**: Remove one of the MaxMind authenticators. Choose either pre-auth or post-auth, not both.
+
+**Check Database**:
+
+```sql
+-- Find logins with both pre-auth and post-auth checks
+SELECT
+    session_id,
+    COUNT(*) as check_count,
+    ARRAY_AGG(is_pre_auth ORDER BY timestamp) as check_types,
+    ARRAY_AGG(risk_score ORDER BY timestamp) as risk_scores
+FROM maxmind_minfraud_check
+WHERE timestamp > NOW() - INTERVAL '1 hour'
+GROUP BY session_id
+HAVING COUNT(*) > 1
+ORDER BY check_count DESC;
 ```
 
 ## Event Viewing Issues
