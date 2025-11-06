@@ -1,0 +1,15 @@
+{
+  "alias": "maxmind-fraud-detection",
+  "config": {
+    "accountId": "YOUR_ACCOUNT_ID",
+    "licenseKey": "YOUR_LICENSE_KEY",
+    "serviceLevel": "SCORE",
+    "deviceTrackingEnabled": "false",
+    "lowRiskThreshold": "30",
+    "highRiskThreshold": "70",
+    "lowRiskAction": "ALLOW",
+    "mediumRiskAction": "CHALLENGE",
+    "highRiskAction": "BLOCK",
+    "failMode": "FAIL_OPEN"
+  }
+}

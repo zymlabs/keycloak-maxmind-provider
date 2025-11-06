@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+
+    ports:
+      - 5432:5432
+
+  keycloak:
+    image: bitnamilegacy/keycloak:24.0.5
+    environment:
+      KEYCLOAK_DATABASE_HOST: postgres
+      KEYCLOAK_DATABASE_PORT: 5432
+      KEYCLOAK_DATABASE_NAME: keycloak
+      KEYCLOAK_DATABASE_USER: keycloak
+      KEYCLOAK_DATABASE_PASSWORD: keycloak
+      KEYCLOAK_CREATE_ADMIN_USER: 'true'
+      KEYCLOAK_ADMIN_USER: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      # Uncomment the line below if you want to specify JDBC parameters. The parameter below is just an example, and it shouldn't be used in production without knowledge. It is highly recommended that you read the PostgreSQL JDBC driver documentation in order to use it.
+      #JDBC_PARAMS: "ssl=true"
+      KEYCLOAK_LOG_LEVEL: INFO
+      KC_LOG_LEVEL_COM_ZYMLABS_KEYCLOAK_MAXMIND_PROVIDER: DEBUG
+      KEYCLOAK_EXTRA_ARGS: --import-realm
+
+      DEBUG: 'true'
+      # DEBUG_SUSPEND: 'y' # Wait for debugger to connect before starting Keycloak
+      DEBUG_PORT: '*:5005'
+
+    ports:
+      - 8080:8080
+      - 5005:5005
+
+    depends_on:
+      - postgres
+
+    volumes:
+      - ./target/zymlabs-maxmind-provider.jar:/opt/bitnami/keycloak/providers/zymlabs-maxmind-provider.jar:rw
+      - ./examples/realms:/opt/bitnami/keycloak/data/import:ro
+

@@ -1,0 +1,40 @@
+{
+  "alias": "browser-with-maxmind",
+  "description": "Browser authentication flow with MaxMind fraud detection",
+  "providerId": "basic-flow",
+  "topLevel": true,
+  "builtIn": false,
+  "authenticationExecutions": [
+    {
+      "authenticator": "auth-cookie",
+      "authenticatorFlow": false,
+      "requirement": "ALTERNATIVE",
+      "priority": 10,
+      "userSetupAllowed": false,
+      "autheticatorFlow": false
+    },
+    {
+      "authenticator": "auth-spnego",
+      "authenticatorFlow": false,
+      "requirement": "DISABLED",
+      "priority": 20,
+      "userSetupAllowed": false,
+      "autheticatorFlow": false
+    },
+    {
+      "authenticator": "identity-provider-redirector",
+      "authenticatorFlow": false,
+      "requirement": "ALTERNATIVE",
+      "priority": 25,
+      "userSetupAllowed": false,
+      "autheticatorFlow": false
+    },
+    {
+      "flowAlias": "browser-with-maxmind-forms",
+      "requirement": "ALTERNATIVE",
+      "priority": 30,
+      "autheticatorFlow": true,
+      "userSetupAllowed": false
+    }
+  ]
+}

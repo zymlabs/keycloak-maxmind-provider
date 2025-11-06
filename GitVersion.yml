@@ -1,0 +1,87 @@
+mode: ContinuousDeployment
+tag-prefix: ''
+continuous-delivery-fallback-tag: ci
+major-version-bump-message: '\+semver:\s?(breaking|major)'
+minor-version-bump-message: '\+semver:\s?(feature|minor)'
+patch-version-bump-message: '\+semver:\s?(fix|patch)'
+no-bump-message: '\+semver:\s?(none|skip)'
+legacy-semver-padding: 4
+build-metadata-padding: 4
+commits-since-version-source-padding: 4
+tag-pre-release-weight: 60000
+commit-message-incrementing: Enabled
+
+branches:
+  master:
+    regex: ^master$|^main$
+    mode: ContinuousDelivery
+    tag: ''
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: true
+    is-mainline: true
+    pre-release-weight: 55000
+
+  develop:
+    regex: ^develop$|^dev(elop)?(ment)?$
+    mode: ContinuousDeployment
+    tag: alpha
+    increment: Minor
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: true
+    tracks-release-branches: true
+    is-release-branch: false
+    is-mainline: false
+    pre-release-weight: 0
+
+  feature:
+    regex: ^features?[/-](?<branchName>.+)
+    mode: ContinuousDeployment
+    tag: alpha.{branchName}
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+
+  hotfix:
+    regex: ^hotfix(es)?[/-](?<branchName>.+)
+    mode: ContinuousDeployment
+    tag: beta
+    increment: Patch
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+    pre-release-weight: 30000
+
+  release:
+    regex: ^releases?[/-](?<branchName>.+)
+    mode: ContinuousDeployment
+    tag: beta
+    increment: None
+    prevent-increment-of-merged-branch-version: true
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: true
+    is-mainline: false
+    pre-release-weight: 30000
+
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    mode: ContinuousDeployment
+    tag: PullRequest
+    increment: Inherit
+    prevent-increment-of-merged-branch-version: false
+    track-merge-target: false
+    tracks-release-branches: false
+    is-release-branch: false
+    is-mainline: false
+
+ignore:
+  sha: []
+merge-message-formats: {}

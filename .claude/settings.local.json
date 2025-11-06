@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mvn clean package:*)",
+      "Bash(java -version:*)",
+      "Bash(/opt/homebrew/bin/mvn test:*)",
+      "WebFetch(domain:www.keycloak.org)",
+      "Bash(docker-compose logs:*)",
+      "WebSearch",
+      "Bash(mvn test)",
+      "Bash(cat:*)",
+      "Bash(jar tf:*)",
+      "Bash(jar xf:*)",
+      "Bash(mvn clean test:*)",
+      "Bash(curl:*)",
+      "Bash(mvn dependency:tree:*)",
+      "Bash(docker exec:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(javap:*)",
+      "Bash(docker-compose restart:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

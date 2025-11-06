@@ -1,0 +1,15 @@
+{
+    "java.configuration.updateBuildConfiguration": "interactive",
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "localhost",
+            "database": "keycloak",
+            "username": "keycloak",
+            "password": "keycloak"
+        }
+    ]
+}
