@@ -186,7 +186,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                             .detail("maxmind_minfraud_device_session_id", deviceSessionId != null ? deviceSessionId : "")
                             .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
-                    // Take action based on risk level (this calls terminal methods)
+                    // Take action based on risk level (this calls terminal methods and persists events)
                     handleRiskAction(context, action, riskScore);
 
                     // Retrieve event ID (available after terminal method)
@@ -206,7 +206,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                             .detail("maxmind_minfraud_error", result.getErrorMessage())
                             .detail("maxmind_minfraud_decision", "ERROR")
                             .detail("maxmind_minfraud_service_level", serviceLevel.name())
-                            .detail(Details.AUTH_METHOD, "maxmind_minfraud");
+                            .detail(Details.AUTH_METHOD, "maxmind_minfraud")
+                            .error("maxmind_api_error"); // Explicitly persist error event
 
                     // Handle based on fail mode (this calls terminal methods)
                     if (failMode == FailMode.FAIL_CLOSED) {
@@ -254,6 +255,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
         switch (action) {
             case ALLOW:
                 logger.infof("Risk action: ALLOW - Proceeding with authentication");
+                context.getEvent().success(); // Explicitly persist event
                 context.success();
                 break;
 
@@ -262,7 +264,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                 // Log event for CHALLENGE action
                 context.getEvent()
                         .detail("maxmind_minfraud_action", "CHALLENGE")
-                        .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore));
+                        .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
+                        .success(); // Explicitly persist event
 
                 // Store auth notes so conditional authenticators can check for CHALLENGE status
                 // Conditional authenticators should check these notes to decide whether to require MFA
@@ -279,7 +282,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                 // Log event for BLOCK action
                 context.getEvent()
                         .detail("maxmind_minfraud_action", "BLOCK")
-                        .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore));
+                        .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
+                        .error("maxmind_high_risk_blocked"); // Explicitly persist error event
                 Response challenge = context.form()
                         .setAttribute("riskScore", String.format("%.2f", riskScore))
                         .setError("loginTooRisky")
@@ -365,7 +369,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
         context.getEvent()
                 .detail("maxmind_minfraud_error", "Configuration error")
                 .detail("maxmind_minfraud_decision", "ERROR")
-                .detail(Details.AUTH_METHOD, "maxmind_minfraud");
+                .detail(Details.AUTH_METHOD, "maxmind_minfraud")
+                .error("maxmind_config_error"); // Explicitly persist error event
         Response challenge = context.form()
                 .setError("maxmindConfigError")
                 .createErrorPage(Response.Status.INTERNAL_SERVER_ERROR);
@@ -506,9 +511,11 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
         // Take action
         if (result.isAllowed()) {
             logger.infof("IP filter: allowing authentication for %s", ipAddress);
+            context.getEvent().success(); // Explicitly persist allowlist event
             context.success();
         } else {
             logger.warnf("IP filter: blocking authentication for %s", ipAddress);
+            context.getEvent().error("maxmind_ip_blocklisted"); // Explicitly persist blocklist error event
             Response challenge = context.form()
                     .setAttribute("ipAddress", ipAddress)
                     .setError("ipAddressBlocked")

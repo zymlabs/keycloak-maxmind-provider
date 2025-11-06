@@ -90,7 +90,8 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
                     .detail("maxmind_mfa_enforcer_decision", "ALLOWED")
                     .detail("maxmind_mfa_enforcer_type", configuredType)
                     .detail("maxmind_mfa_enforcer_risk_score", riskScore != null ? riskScore : "unknown")
-                    .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer");
+                    .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer")
+                    .success(); // Explicitly persist event
 
             context.success();
         } else {
@@ -104,7 +105,8 @@ public class MaxMindMfaEnforcerAuthenticator implements Authenticator {
                     .detail("maxmind_mfa_enforcer_reason", "No MFA configured")
                     .detail("maxmind_mfa_enforcer_risk_score", riskScore != null ? riskScore : "unknown")
                     .detail("maxmind_mfa_enforcer_checked_types", mfaTypes)
-                    .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer");
+                    .detail(Details.AUTH_METHOD, "maxmind_mfa_enforcer")
+                    .error("maxmind_mfa_not_configured"); // Explicitly persist error event
 
             // Block authentication with error message
             Response challenge = context.form()
