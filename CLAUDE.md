@@ -62,6 +62,15 @@ The project includes comprehensive unit tests for core functionality:
 - Missing/invalid configuration handling
 - Boolean string parsing ("true"/"false")
 
+**MaxMindMfaEnforcerAuthenticatorTest** (~20 tests)
+- No challenge note scenarios (should allow)
+- Challenge with user having OTP/WebAuthn (should allow)
+- Challenge without MFA configured (should block)
+- Custom MFA credential types configuration
+- Configuration defaults and edge cases
+- Event logging for ALLOWED/BLOCKED decisions
+- Error page attributes for blocked users
+
 ### Testing Framework
 
 - **JUnit 5** (Jupiter): Test framework
@@ -152,6 +161,17 @@ Store result in maxmind_minfraud_check table
 - Creates singleton authenticator instance
 - Registers as `maxmind-minfraud-authenticator` provider
 
+**MaxMindMfaEnforcerAuthenticator** - MFA requirement enforcer
+- `authenticate()`: Checks for CHALLENGE auth note and verifies MFA credentials
+- Blocks users without MFA when CHALLENGE is triggered
+- Allows users with MFA to proceed to verification
+- Supports configurable credential types (otp, webauthn, sms-otp, etc.)
+
+**MaxMindMfaEnforcerAuthenticatorFactory** - MFA enforcer registration
+- Registers as `maxmind-mfa-enforcer` provider
+- Configures `mfaCredentialTypes` property (default: "otp,webauthn")
+- Displays in admin UI as "MaxMind MFA Enforcer"
+
 **MaxMindMinFraudService** - MaxMind API wrapper
 - Supports three service levels: SCORE, INSIGHTS, FACTORS
 - Uses official MaxMind Java SDK (WebServiceClient)
@@ -171,7 +191,7 @@ Store result in maxmind_minfraud_check table
 
 SPI providers are registered via files in `src/main/resources/META-INF/services/`:
 
-- `org.keycloak.authentication.AuthenticatorFactory` → MaxMindMinFraudAuthenticatorFactory
+- `org.keycloak.authentication.AuthenticatorFactory` → MaxMindMinFraudAuthenticatorFactory, MaxMindMfaEnforcerAuthenticatorFactory
 - `org.keycloak.provider.Spi` → MaxMindMinFraudCheckProviderFactory
 
 These files enable Keycloak's service loader to discover and load the extension.
@@ -201,9 +221,53 @@ The authenticator evaluates risk scores against two thresholds to determine thre
 - **High Risk** (score > highRiskThreshold): Execute highRiskAction
 
 Actions map to Keycloak authentication flow states:
-- `ALLOW`: `context.success()` - Continue to next authenticator
-- `CHALLENGE`: `context.attempted()` - Trigger conditional flows (e.g., MFA)
-- `BLOCK`: `context.failure()` - Deny authentication with error page
+- `ALLOW`: `context.success()` - Continue to next authenticator (generates LOGIN event)
+- `CHALLENGE`: `context.success()` + set auth notes - Allow authentication but signal need for MFA (generates LOGIN event)
+- `BLOCK`: `context.failure()` - Deny authentication with error page (generates LOGIN_ERROR event)
+
+**CHALLENGE Action Implementation:**
+
+When CHALLENGE action is triggered, the authenticator:
+1. Calls `context.success()` to allow the authentication flow to continue
+2. Sets authentication session notes for conditional authenticators to check:
+   - `maxmind_challenge` = "true" (indicates CHALLENGE was triggered)
+   - `maxmind_risk_score` = risk score value (e.g., "45.50")
+3. Logs the action to Keycloak events with `maxmind_minfraud_action=CHALLENGE`
+
+**MFA Enforcement for CHALLENGE Actions:**
+
+The extension includes **MaxMindMfaEnforcerAuthenticator** which enforces MFA requirement when CHALLENGE is triggered:
+
+1. **Checks for CHALLENGE**: Reads `maxmind_challenge` auth note set by MaxMind authenticator
+2. **Verifies MFA Configuration**: Checks if user has at least one configured MFA credential
+3. **Blocks Users Without MFA**: Prevents OTP setup during suspicious logins by calling `context.failure()`
+4. **Allows Users With MFA**: Lets users proceed to MFA verification step
+
+**Configuration**:
+- `mfaCredentialTypes`: Comma-separated list of credential types (default: "otp,webauthn")
+- Supports: otp (TOTP/HOTP), webauthn (passkeys), sms-otp (if extension installed)
+
+**Authentication Flow Structure**:
+```
+Browser Forms
+├── Username Password Form (REQUIRED)
+├── MaxMind minFraud (REQUIRED) ← Assesses risk, sets challenge note
+├── MaxMind MFA Enforcer (REQUIRED) ← Enforces MFA requirement
+└── Conditional OTP (CONDITIONAL) ← Presents MFA challenge
+    ├── conditional-user-configured (REQUIRED)
+    └── OTP Form (REQUIRED)
+```
+
+**Key Implementation Details**:
+- **MaxMindMfaEnforcerAuthenticator**: Regular authenticator (not conditional) that can block authentication
+- Uses `user.credentialManager().isConfiguredFor(type)` to check MFA credentials
+- Logs detailed events: `maxmind_mfa_enforcer_decision` (ALLOWED/BLOCKED), `maxmind_mfa_enforcer_type`, `maxmind_mfa_enforcer_risk_score`
+- Error message key: `mfaRequiredForSuspiciousActivity`
+
+**Why Not Conditional Authenticator?**
+- ConditionalAuthenticator can only return true/false (cannot call `context.failure()`)
+- Regular authenticator allows blocking users without MFA during suspicious logins
+- Provides better security by preventing attackers from gaining access by simply setting up OTP during fraud attempt
 
 ### Error Handling Strategy
 

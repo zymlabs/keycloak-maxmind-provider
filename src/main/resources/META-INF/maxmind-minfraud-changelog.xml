@@ -89,4 +89,23 @@
         </rollback>
     </changeSet>
 
+    <changeSet id="maxmind-minfraud-1.1.0" author="zymlabs">
+        <comment>Add event_id column to link fraud checks with Keycloak events</comment>
+
+        <addColumn tableName="maxmind_minfraud_check">
+            <column name="event_id" type="VARCHAR(36)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+
+        <createIndex indexName="idx_event_id" tableName="maxmind_minfraud_check">
+            <column name="event_id"/>
+        </createIndex>
+
+        <rollback>
+            <dropIndex indexName="idx_event_id" tableName="maxmind_minfraud_check"/>
+            <dropColumn tableName="maxmind_minfraud_check" columnName="event_id"/>
+        </rollback>
+    </changeSet>
+
 </databaseChangeLog>

@@ -35,6 +35,7 @@ Stores all fraud check results for auditing and analytics.
 | `raw_response` | TEXT | YES | Full JSON response from MaxMind API |
 | `service_level` | VARCHAR(20) | YES | SCORE, INSIGHTS, or FACTORS |
 | `error_message` | TEXT | YES | Error message if API call failed |
+| `event_id` | VARCHAR(36) | YES | Keycloak event ID for direct correlation |
 
 ### Indexes
 
@@ -42,6 +43,7 @@ Stores all fraud check results for auditing and analytics.
 - `idx_realm_id`: Index on `realm_id` for realm-wide queries
 - `idx_timestamp`: Index on `timestamp` for date range queries
 - `idx_user_timestamp`: Composite index on `(user_id, timestamp)` for user history queries
+- `idx_event_id`: Index on `event_id` for direct event correlation
 
 ### Storage Estimates
 
@@ -332,6 +334,35 @@ Keycloak stores events in the `event_entity` table:
 
 ### Correlating Events with Fraud Checks
 
+#### By Event ID (Direct Join - Recommended)
+
+The most accurate correlation method uses the `event_id` column for a direct join:
+
+```sql
+-- Direct join using event_id (most accurate)
+SELECT
+    e.id as event_id,
+    to_timestamp(e.time / 1000) as event_time,
+    e.type as event_type,
+    e.user_id,
+    e.ip_address,
+    e.details as event_details,
+    f.id as fraud_check_id,
+    f.timestamp as fraud_check_time,
+    f.risk_score,
+    f.decision,
+    f.request_id,
+    f.service_level
+FROM event_entity e
+INNER JOIN maxmind_minfraud_check f
+    ON e.id = f.event_id
+WHERE e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000
+ORDER BY e.time DESC
+LIMIT 100;
+```
+
+This method provides 100% accurate correlation since each fraud check record stores the exact event ID it's associated with.
+
 #### By User and Time
 
 ```sql
@@ -381,7 +412,7 @@ ORDER BY e.time DESC;
 ### Comparing Event and Database Counts
 
 ```sql
--- Compare record counts between events and database
+-- Compare record counts between events and database (using event_id for accurate matching)
 SELECT
     (SELECT COUNT(*)
      FROM event_entity
@@ -393,10 +424,8 @@ SELECT
     (SELECT COUNT(*)
      FROM event_entity e
      INNER JOIN maxmind_minfraud_check f
-         ON e.user_id = f.user_id
-         AND ABS(EXTRACT(EPOCH FROM f.timestamp) * 1000 - e.time) < 5000
-     WHERE e.details LIKE '%maxmind_minfraud%'
-       AND e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000) as matched_count;
+         ON e.id = f.event_id
+     WHERE e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000) as matched_count;
 ```
 
 ### Extracting Event Details
@@ -483,7 +512,7 @@ ORDER BY date DESC, source;
 ### High-Risk Events with Full Context
 
 ```sql
--- High-risk events with complete fraud check data
+-- High-risk events with complete fraud check data (using event_id for accurate join)
 SELECT
     to_timestamp(e.time / 1000) as event_time,
     e.type as event_type,
@@ -500,9 +529,8 @@ SELECT
     f.raw_response
 FROM event_entity e
 INNER JOIN maxmind_minfraud_check f
-    ON e.user_id = f.user_id
-    AND ABS(EXTRACT(EPOCH FROM f.timestamp) * 1000 - e.time) < 5000
-WHERE e.details LIKE '%maxmind_minfraud_risk_level=HIGH%'
+    ON e.id = f.event_id
+WHERE f.risk_score >= 70  -- High risk threshold
   AND e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000
 ORDER BY e.time DESC;
 ```
@@ -510,7 +538,7 @@ ORDER BY e.time DESC;
 ### Finding Discrepancies
 
 ```sql
--- Find fraud checks without corresponding events
+-- Find fraud checks without corresponding events (using event_id)
 SELECT
     f.id,
     f.timestamp,
@@ -518,13 +546,12 @@ SELECT
     f.username,
     f.risk_score,
     f.decision,
-    f.request_id
+    f.event_id
 FROM maxmind_minfraud_check f
 LEFT JOIN event_entity e
-    ON f.user_id = e.user_id
-    AND e.details LIKE '%' || f.request_id || '%'
+    ON f.event_id = e.id
 WHERE f.timestamp > NOW() - INTERVAL '1 day'
-  AND f.request_id IS NOT NULL
+  AND f.event_id IS NOT NULL
   AND e.id IS NULL
 ORDER BY f.timestamp DESC;
 
@@ -572,7 +599,8 @@ ORDER BY e.time DESC;
    - Export data for machine learning
 
 3. **Correlate When Needed**:
-   - Use request ID for accurate correlation
+   - Use event_id for most accurate correlation (direct join on e.id = f.event_id)
+   - Fallback to request_id if event_id is null (legacy data)
    - Events provide authentication context (session, client)
    - Database provides full fraud check details
 

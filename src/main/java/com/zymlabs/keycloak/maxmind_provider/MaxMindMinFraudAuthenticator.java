@@ -79,36 +79,29 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
     /**
      * Present a form with Device Tracking JavaScript injected.
+     * This form will auto-submit after device tracking completes.
+     *
+     * Uses addScript() method to inject MaxMind SDK in HTML header,
+     * and custom FreeMarker template for auto-submit logic.
      */
     private void presentDeviceTrackingForm(AuthenticationFlowContext context) {
         LoginFormsProvider form = context.form();
 
-        // Inject MaxMind Device Tracking script
-        String deviceTrackingScript =
-            "<script src=\"https://device.maxmind.com/js/device.js\"></script>" +
-            "<script>" +
-            "  var deviceSessionId = null;" +
-            "  if (typeof MaxMind !== 'undefined') {" +
-            "    deviceSessionId = MaxMind.getSessionId();" +
-            "    console.log('MaxMind Device Session ID:', deviceSessionId);" +
-            "  }" +
-            "  window.addEventListener('load', function() {" +
-            "    var form = document.getElementById('kc-form-login');" +
-            "    if (form && deviceSessionId) {" +
-            "      var input = document.createElement('input');" +
-            "      input.type = 'hidden';" +
-            "      input.name = 'deviceSessionId';" +
-            "      input.value = deviceSessionId;" +
-            "      form.appendChild(input);" +
-            "    }" +
-            "  });" +
-            "</script>";
+        // Get MaxMind account ID from configuration
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        String accountId = config.getConfig().get(CONFIG_ACCOUNT_ID);
 
-        form.setAttribute("maxmindDeviceTracking", deviceTrackingScript);
+        // Pass account ID to template so it can be set before loading device.js
+        form.setAttribute("maxmindAccountId", accountId);
 
-        // Return success to continue with normal login flow
-        // The device tracking script will be included in the page
-        context.success();
+        // Set optional attributes for template customization
+        form.setAttribute("maxAttempts", 100);  // 10 seconds (100 * 100ms)
+
+        // Use custom template from theme-resources/templates/
+        // This template is globally available without theme configuration
+        Response challenge = form.createForm("device-tracking.ftl");
+
+        context.challenge(challenge);
     }
 
     /**
@@ -179,15 +172,19 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                             .detail("maxmind_minfraud_decision", action.name())
                             .detail("maxmind_minfraud_request_id", result.getRequestId())
                             .detail("maxmind_minfraud_service_level", serviceLevel.name())
+                            .detail("maxmind_minfraud_device_session_id", deviceSessionId != null ? deviceSessionId : "")
                             .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
-                    // Store fraud check result
+                    // Take action based on risk level (this calls terminal methods)
+                    handleRiskAction(context, action, riskScore);
+
+                    // Retrieve event ID (available after terminal method)
+                    String eventId = context.getEvent().getEvent().getId();
+
+                    // Store fraud check result with event ID
                     storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
                                   riskScore, action.name(), deviceSessionId, result.getRequestId(),
-                                  result.getRawResponse(), serviceLevel.name(), null);
-
-                    // Take action based on risk level
-                    handleRiskAction(context, action, riskScore);
+                                  result.getRawResponse(), serviceLevel.name(), null, eventId);
 
                 } else {
                     // API call failed
@@ -200,12 +197,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                             .detail("maxmind_minfraud_service_level", serviceLevel.name())
                             .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
-                    // Store error
-                    storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
-                                  -1.0, "ERROR", deviceSessionId, null, null, serviceLevel.name(),
-                                  result.getErrorMessage());
-
-                    // Handle based on fail mode
+                    // Handle based on fail mode (this calls terminal methods)
                     if (failMode == FailMode.FAIL_CLOSED) {
                         logger.warn("Fail-closed mode: blocking login due to API error");
                         Response challenge = context.form()
@@ -216,6 +208,14 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                         logger.warn("Fail-open mode: allowing login despite API error");
                         context.success();
                     }
+
+                    // Retrieve event ID (available after terminal method)
+                    String eventId = context.getEvent().getEvent().getId();
+
+                    // Store error with event ID
+                    storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
+                                  -1.0, "ERROR", deviceSessionId, null, null, serviceLevel.name(),
+                                  result.getErrorMessage(), eventId);
                 }
             } finally {
                 service.close();
@@ -223,11 +223,16 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
         } catch (Exception e) {
             logger.errorf(e, "Error during fraud check");
-            // Store error
+            // Call terminal method first
+            handleConfigurationError(context);
+
+            // Retrieve event ID (available after terminal method)
+            String eventId = context.getEvent().getEvent().getId();
+
+            // Store error with event ID
             storeFraudCheck(context, userId, realmId, user.getUsername(), email, ipAddress,
                           -1.0, "ERROR", deviceSessionId, null, null, null,
-                          "Configuration error: " + e.getMessage());
-            handleConfigurationError(context);
+                          "Configuration error: " + e.getMessage(), eventId);
         }
     }
 
@@ -247,8 +252,15 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
                 context.getEvent()
                         .detail("maxmind_minfraud_action", "CHALLENGE")
                         .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore));
-                // Mark as attempted, which will force conditional flows (like OTP) to execute
-                context.attempted();
+
+                // Store auth notes so conditional authenticators can check for CHALLENGE status
+                // Conditional authenticators should check these notes to decide whether to require MFA
+                context.getAuthenticationSession().setAuthNote("maxmind_challenge", "true");
+                context.getAuthenticationSession().setAuthNote("maxmind_risk_score", String.format("%.2f", riskScore));
+
+                // Allow authentication to continue - conditional MFA flows will check auth notes
+                // This generates a LOGIN event (after MFA succeeds) rather than LOGIN_ERROR
+                context.success();
                 break;
 
             case BLOCK:
@@ -272,7 +284,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
     private void storeFraudCheck(AuthenticationFlowContext context, String userId, String realmId,
                                 String username, String email, String ipAddress, double riskScore,
                                 String decision, String deviceSessionId, String requestId,
-                                String rawResponse, String serviceLevel, String errorMessage) {
+                                String rawResponse, String serviceLevel, String errorMessage,
+                                String eventId) {
         // Check if database recording is enabled
         if (!isRecordFraudChecksEnabled(context)) {
             logger.debugf("Database recording disabled, skipping fraud check storage");
@@ -298,9 +311,10 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
             entity.setRawResponse(rawResponse);
             entity.setServiceLevel(serviceLevel);
             entity.setErrorMessage(errorMessage);
+            entity.setEventId(eventId);
 
             em.persist(entity);
-            logger.debugf("Fraud check record stored: id=%d", entity.getId());
+            logger.debugf("Fraud check record stored: id=%d, event_id=%s", entity.getId(), eventId);
         } catch (Exception e) {
             logger.errorf(e, "Error storing fraud check result");
         }

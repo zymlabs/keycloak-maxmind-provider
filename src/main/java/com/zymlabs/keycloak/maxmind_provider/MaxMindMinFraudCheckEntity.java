@@ -15,7 +15,8 @@ import java.util.Date;
     @Index(name = "idx_user_id", columnList = "user_id"),
     @Index(name = "idx_realm_id", columnList = "realm_id"),
     @Index(name = "idx_timestamp", columnList = "timestamp"),
-    @Index(name = "idx_user_timestamp", columnList = "user_id,timestamp")
+    @Index(name = "idx_user_timestamp", columnList = "user_id,timestamp"),
+    @Index(name = "idx_event_id", columnList = "event_id")
 })
 @NamedQueries({
     @NamedQuery(name = "findByUserId",
@@ -75,6 +76,9 @@ public class MaxMindMinFraudCheckEntity implements Serializable {
 
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage; // Store error if API call failed
+
+    @Column(name = "event_id", length = 36)
+    private String eventId; // Keycloak event ID for correlation
 
     // Constructors
     public MaxMindMinFraudCheckEntity() {
@@ -192,6 +196,14 @@ public class MaxMindMinFraudCheckEntity implements Serializable {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public String getEventId() {
+        return eventId;
+    }
+
+    public void setEventId(String eventId) {
+        this.eventId = eventId;
     }
 
     @Override

@@ -14,7 +14,8 @@ Complete reference for all configuration options in the MaxMind minFraud Keycloa
    - [API Failure Mode](#api-failure-mode)
    - [Timeouts](#connection-timeout-ms)
 8. [Event Configuration](#event-configuration)
-9. [Advanced Scenarios](#advanced-scenarios)
+9. [MFA Enforcer Configuration](#mfa-enforcer-configuration)
+10. [Advanced Scenarios](#advanced-scenarios)
 
 ## Authenticator Configuration
 
@@ -779,6 +780,154 @@ If events are not appearing:
 5. **Verify database permissions**: Keycloak needs INSERT permission on `event_entity` table
 
 See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#event-viewing-issues) for more details.
+
+## MFA Enforcer Configuration
+
+The **MaxMind MFA Enforcer** authenticator works with the MaxMind minFraud authenticator to enforce MFA requirements when suspicious activity is detected.
+
+### Purpose
+
+When the MaxMind minFraud authenticator triggers a CHALLENGE action (medium risk), the MFA Enforcer:
+
+1. **Checks** if the user has MFA configured
+2. **Allows** users WITH MFA to proceed to MFA verification
+3. **Blocks** users WITHOUT MFA to prevent OTP setup during suspicious logins
+
+This prevents attackers from bypassing fraud detection by simply setting up OTP during a fraudulent login attempt.
+
+### Configuration
+
+**MFA Credential Types**
+
+**Type**: String (comma-separated)
+**Required**: No
+**Default**: `otp,webauthn`
+
+List of credential types to check for MFA enforcement.
+
+**Supported Types**:
+- `otp` - TOTP/HOTP (Time-based or HMAC-based One-Time Password)
+- `webauthn` - WebAuthn/FIDO2 (passkeys, security keys)
+- `sms-otp` - SMS OTP (requires SMS OTP extension)
+- `email-otp` - Email OTP (requires Email OTP extension)
+- Custom types from other Keycloak extensions
+
+**Example Values**:
+```
+# Default - check for OTP or WebAuthn
+otp,webauthn
+
+# Only TOTP
+otp
+
+# TOTP, WebAuthn, or SMS OTP
+otp,webauthn,sms-otp
+
+# Custom MFA types
+otp,custom-mfa-type
+```
+
+### Authentication Flow Structure
+
+The MFA Enforcer must be placed **between** the MaxMind minFraud authenticator and the MFA conditional flow:
+
+```
+Browser Forms
+├── Username Password Form (REQUIRED)
+├── MaxMind minFraud (REQUIRED)          ← Assesses risk, sets challenge note
+├── MaxMind MFA Enforcer (REQUIRED)      ← Enforces MFA requirement
+└── Conditional OTP (CONDITIONAL)        ← Presents MFA challenge
+    ├── conditional-user-configured (REQUIRED)
+    └── OTP Form (REQUIRED)
+```
+
+### Behavior Examples
+
+**Scenario 1: Low Risk - No MFA Required**
+```
+User: john@example.com
+Risk Score: 10 (LOW)
+Action: ALLOW
+MFA Enforcer: Skipped (no challenge note)
+Result: Login succeeds without MFA
+```
+
+**Scenario 2: Medium Risk - User Has MFA**
+```
+User: alice@example.com
+Risk Score: 50 (MEDIUM)
+Action: CHALLENGE
+Has OTP: Yes
+MFA Enforcer: Allows authentication to continue
+Result: User prompted for OTP, login succeeds after MFA
+```
+
+**Scenario 3: Medium Risk - User Does NOT Have MFA**
+```
+User: attacker@example.com
+Risk Score: 60 (MEDIUM)
+Action: CHALLENGE
+Has OTP: No
+MFA Enforcer: Blocks authentication
+Result: Login fails with error "Multi-factor authentication is required due to suspicious login activity"
+Event: LOGIN_ERROR with maxmind_mfa_enforcer_decision=BLOCKED
+```
+
+**Scenario 4: High Risk - Blocked Regardless of MFA**
+```
+User: hacker@example.com
+Risk Score: 85 (HIGH)
+Action: BLOCK
+MFA Enforcer: Never reached
+Result: Login fails at MaxMind authenticator before MFA check
+```
+
+### Event Logging
+
+The MFA Enforcer logs detailed events to Keycloak's event system:
+
+**Successful MFA Verification (User Has MFA)**:
+```
+maxmind_mfa_enforcer_decision: ALLOWED
+maxmind_mfa_enforcer_type: otp
+maxmind_mfa_enforcer_risk_score: 45.50
+auth_method: maxmind_mfa_enforcer
+```
+
+**Blocked (User Does NOT Have MFA)**:
+```
+maxmind_mfa_enforcer_decision: BLOCKED
+maxmind_mfa_enforcer_reason: No MFA configured
+maxmind_mfa_enforcer_risk_score: 65.00
+maxmind_mfa_enforcer_checked_types: otp,webauthn
+auth_method: maxmind_mfa_enforcer
+```
+
+### Error Messages
+
+When a user without MFA is blocked, they see:
+
+> **Multi-factor authentication is required due to suspicious login activity. Please configure MFA before attempting to log in, or contact support for assistance.**
+
+This message can be customized in `theme-resources/messages/messages_en.properties`:
+```properties
+mfaRequiredForSuspiciousActivity=Multi-factor authentication is required due to suspicious login activity. Please configure MFA before attempting to log in, or contact support for assistance.
+```
+
+### Best Practices
+
+1. **Always Use with MaxMind**: The MFA Enforcer requires the MaxMind minFraud authenticator to set the challenge note
+2. **Configure Multiple MFA Types**: Support both OTP and WebAuthn for better user experience
+3. **Educate Users**: Proactively encourage users to set up MFA before suspicious activity occurs
+4. **Monitor Events**: Track `maxmind_mfa_enforcer_decision=BLOCKED` events to identify users who need MFA setup
+
+### Why Not Use Conditional Authenticator?
+
+The MFA Enforcer is a **Regular Authenticator** (not a Conditional Authenticator) because:
+
+- **ConditionalAuthenticator** can only return `true`/`false` (cannot call `context.failure()`)
+- **Regular Authenticator** can block authentication by calling `context.failure()`
+- This provides better security by preventing attackers from setting up OTP during fraudulent login attempts
 
 ## Advanced Scenarios
 

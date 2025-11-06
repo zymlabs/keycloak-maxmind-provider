@@ -16,3 +16,4 @@
 #
 
 com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticatorFactory
+com.zymlabs.keycloak.maxmind_provider.MaxMindMfaEnforcerAuthenticatorFactory

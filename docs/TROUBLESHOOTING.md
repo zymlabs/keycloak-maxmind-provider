@@ -570,10 +570,25 @@ GROUP BY type;
 ```
 
 **Expected Types**:
-- `LOGIN`: Successful logins (including ALLOW and CHALLENGE)
-- `LOGIN_ERROR`: Failed logins (BLOCK and ERROR)
+- `LOGIN`: Successful logins (including ALLOW and CHALLENGE actions)
+- `LOGIN_ERROR`: Failed logins (BLOCK actions and API errors)
+
+**Important**: CHALLENGE actions generate `LOGIN` events (not LOGIN_ERROR) because:
+- CHALLENGE uses `context.success()` to allow authentication to continue
+- The authenticator sets auth session notes (`maxmind_challenge=true`, `maxmind_risk_score=<score>`)
+- Conditional authenticators should check these notes to require MFA
+- After MFA succeeds, the final event type is `LOGIN`
 
 **If types are incorrect**: This is expected Keycloak behavior - the event type is determined by the authentication flow outcome, not the fraud check result.
+
+**Querying for CHALLENGE Events**:
+```sql
+SELECT time, user_id, ip_address, details
+FROM event_entity
+WHERE details LIKE '%maxmind_minfraud_action=CHALLENGE%'
+  AND time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000
+ORDER BY time DESC;
+```
 
 ### Finding Events by Risk Level
 
