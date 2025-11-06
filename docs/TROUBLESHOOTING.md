@@ -443,6 +443,229 @@ ORDER BY timestamp DESC;
 3. **Enable device tracking**: Better device reputation
 4. **Use CHALLENGE for medium risk**: Force MFA more aggressively
 
+## MFA Enforcer Issues
+
+The MFA Enforcer authenticator blocks users without MFA when fraud is detected. Use this section to diagnose issues with MFA enforcement.
+
+### Users with MFA Getting Blocked
+
+**Symptom**: Users who have MFA configured are being blocked by MFA Enforcer with "Multi-factor authentication is required" error.
+
+**Check MFA Credentials in Database**:
+
+```sql
+-- Verify user has MFA credentials
+SELECT
+    user_id,
+    type,
+    created_date,
+    user_label
+FROM credential
+WHERE user_id = 'user-uuid-here'
+  AND type IN ('otp', 'webauthn');
+```
+
+**Possible Causes**:
+1. MFA credential type not in configured list
+2. User's credential type doesn't match expected format
+3. MFA Enforcer configuration mismatch
+
+**Solutions**:
+
+1. **Check MFA Credential Types configuration**:
+   - Go to Authentication → Flows → [Your Flow]
+   - Click Actions (⚙️) next to **MaxMind MFA Enforcer**
+   - Click **Config**
+   - Verify **MFA Credential Types** matches what users have (e.g., `otp,webauthn`)
+   - Common values:
+     - `otp` - TOTP/HOTP
+     - `webauthn` - WebAuthn/FIDO2
+     - `otp,webauthn` - Either OTP or WebAuthn
+
+2. **Check Keycloak logs for details**:
+```bash
+grep -i "mfa enforcer" /path/to/keycloak/data/log/keycloak.log | tail -20
+```
+
+Look for messages like:
+```
+MaxMind CHALLENGE triggered for user testuser (risk_score=45.50), verifying MFA configuration
+User testuser has MFA configured (type=otp), allowing authentication to proceed
+```
+
+3. **Verify credential type in Keycloak**:
+   - Go to Users → [Username] → Credentials tab
+   - Check if credential is present and not disabled
+
+### Users Without MFA Not Getting Blocked
+
+**Symptom**: Medium-risk users without MFA are proceeding to OTP setup screen instead of being blocked.
+
+**Possible Causes**:
+1. MFA Enforcer not added to authentication flow
+2. MFA Enforcer set to CONDITIONAL or DISABLED instead of REQUIRED
+3. MaxMind not setting challenge auth note
+4. MFA Enforcer positioned incorrectly in flow
+
+**Solutions**:
+
+1. **Verify flow structure**:
+
+Go to Authentication → Flows → [Your Flow] and verify the structure:
+
+```
+Browser Forms
+├── Username Password Form (REQUIRED)
+├── MaxMind minFraud (REQUIRED)          ← Must be before MFA Enforcer
+├── MaxMind MFA Enforcer (REQUIRED)      ← Must be REQUIRED, not CONDITIONAL
+└── Conditional OTP (CONDITIONAL)
+```
+
+2. **Check if MaxMind is setting challenge auth note**:
+
+Enable debug logging:
+```bash
+# Add to Keycloak configuration
+logger.maxmind.level=DEBUG
+logger.maxmind.name=com.zymlabs.keycloak.maxmind_provider
+```
+
+Then check logs for:
+```
+grep "maxmind_challenge" /path/to/keycloak/data/log/keycloak.log
+```
+
+You should see:
+```
+MaxMind CHALLENGE triggered for user testuser (risk_score=50.00)
+```
+
+3. **Verify MaxMind risk actions**:
+   - Go to Authentication → Flows → [Your Flow]
+   - Click Actions (⚙️) next to **MaxMind minFraud**
+   - Click **Config**
+   - Check that **Medium Risk Action** is set to **CHALLENGE** (not ALLOW)
+   - Verify thresholds place user's risk score in medium range
+
+4. **Check MFA Enforcer requirement**:
+   - In the flow, verify **MaxMind MFA Enforcer** is set to **REQUIRED**
+   - If set to CONDITIONAL or DISABLED, it won't execute
+
+### MFA Enforcer Not Logging Events
+
+**Symptom**: No `maxmind_mfa_enforcer_*` event details appearing in events or logs.
+
+**Check Event Configuration**:
+
+```sql
+-- Verify MFA Enforcer events are being created
+SELECT COUNT(*) FROM event_entity
+WHERE details LIKE '%maxmind_mfa_enforcer%'
+  AND time > EXTRACT(EPOCH FROM NOW() - INTERVAL '1 hour') * 1000;
+```
+
+**If count is 0**:
+
+1. **Verify MFA Enforcer is executing**:
+
+Check main logs for MFA Enforcer activity:
+```bash
+grep -i "mfa enforcer" /path/to/keycloak/data/log/keycloak.log | tail -50
+```
+
+If you see no output, MFA Enforcer is not executing. Check:
+- Is MaxMind setting challenge auth note? (See previous section)
+- Is MFA Enforcer in the flow and set to REQUIRED?
+
+2. **Enable debug logging**:
+```bash
+logger.maxmind.level=DEBUG
+logger.maxmind.name=com.zymlabs.keycloak.maxmind_provider
+```
+
+3. **Check if Save Events is enabled**:
+   - Go to Realm Settings → Events → Event Listeners
+   - Verify **jboss-logging** is in the list
+   - Go to **User Events Config** tab
+   - Verify **Save Events** is **ON**
+
+### Custom Error Message Configuration
+
+**Symptom**: Want to customize the "Multi-factor authentication is required" error message shown to users.
+
+**Solution**: Create or modify theme messages file.
+
+1. **Locate your theme** (or create custom theme):
+```bash
+# Keycloak themes location
+cd /path/to/keycloak/themes/
+```
+
+2. **Create or edit messages file**:
+```bash
+# For custom theme
+mkdir -p mytheme/login/messages/
+vi mytheme/login/messages/messages_en.properties
+```
+
+3. **Add custom message**:
+```properties
+mfaRequiredForSuspiciousActivity=Multi-factor authentication is required due to suspicious activity. Please contact support to set up MFA before logging in again.
+```
+
+4. **Apply custom theme**:
+   - Go to Realm Settings → Themes
+   - Set **Login Theme** to your custom theme
+   - Click **Save**
+
+5. **Test the error message**:
+   - Try logging in with a user without MFA during medium-risk scenario
+   - Verify custom message appears
+
+**Alternative messages**:
+```properties
+# More user-friendly
+mfaRequiredForSuspiciousActivity=For your security, two-factor authentication is required for this login. Please set up 2FA in your account settings before trying again.
+
+# More technical
+mfaRequiredForSuspiciousActivity=Authentication blocked: MFA not configured. Contact your administrator.
+
+# With support info
+mfaRequiredForSuspiciousActivity=Two-factor authentication required for suspicious login activity. Contact support@yourcompany.com for assistance.
+```
+
+### MFA Enforcer Blocking Too Many Users
+
+**Symptom**: Legitimate users being blocked because they haven't set up MFA yet.
+
+**This is by design**, but here are strategies to reduce impact:
+
+1. **Adjust MaxMind thresholds**:
+   - Increase **Low Risk Threshold** (30 → 40)
+   - Increase **High Risk Threshold** (70 → 80)
+   - This makes medium-risk range narrower, triggering CHALLENGE less often
+
+2. **Encourage proactive MFA adoption**:
+   - Send emails to users asking them to set up MFA
+   - Add banner in account console promoting MFA
+   - Use Keycloak Required Actions to prompt MFA setup at next login (before fraud occurs)
+
+3. **Temporarily use ALLOW for medium risk**:
+   - During MFA rollout period
+   - Set **Medium Risk Action** to **ALLOW**
+   - After MFA adoption is high, change to **CHALLENGE**
+
+4. **Monitor MFA adoption**:
+```sql
+-- Check MFA adoption rate
+SELECT
+    COUNT(DISTINCT user_id) as total_users,
+    COUNT(DISTINCT CASE WHEN type IN ('otp', 'webauthn') THEN user_id END) as users_with_mfa,
+    ROUND(100.0 * COUNT(DISTINCT CASE WHEN type IN ('otp', 'webauthn') THEN user_id END) / COUNT(DISTINCT user_id), 2) as mfa_adoption_pct
+FROM user_entity u
+LEFT JOIN credential c ON u.id = c.user_id;
+```
+
 ## Event Viewing Issues
 
 The extension logs all fraud checks to both the database (`maxmind_minfraud_check` table) and Keycloak's event system. If you're having trouble viewing events, use this section to diagnose.

@@ -10,6 +10,7 @@ A Keycloak authentication extension that integrates MaxMind minFraud fraud detec
 - **Fraud Detection**: Integrate MaxMind minFraud API (Score, Insights, or Factors) into Keycloak authentication
 - **Device Tracking**: Optional MaxMind Device Tracking for enhanced device fingerprinting
 - **Risk-Based Actions**: Configurable actions based on risk levels (Allow, Challenge with MFA, or Block)
+- **MFA Enforcement**: Block users without MFA during suspicious logins to prevent attackers from setting up OTP during fraud attempts
 - **Per-Realm Configuration**: Different settings for each Keycloak realm
 - **Dual Logging**: Store fraud check results in both database (long-term analytics) and Keycloak events (short-term audit)
 - **Event Integration**: Automatic logging to Keycloak's event system for real-time monitoring and compliance
@@ -170,6 +171,22 @@ When enabled, MaxMind Device Tracking adds browser/device fingerprinting:
 2. Device session ID is collected client-side
 3. Session ID is sent to minFraud API for enhanced fraud detection
 4. MaxMind tracks device history across login attempts
+
+### MFA Enforcement for Suspicious Logins
+
+The **MaxMind MFA Enforcer** authenticator provides an additional security layer when fraud is detected. It prevents attackers from bypassing security by setting up MFA during a fraudulent login attempt.
+
+**How it works:**
+- When MaxMind detects medium-risk activity (CHALLENGE action):
+  - Users **with** MFA configured → Prompted for MFA verification
+  - Users **without** MFA configured → Login blocked with security message
+
+**Benefits:**
+- Prevents attackers from gaining access by simply setting up OTP during fraud attempt
+- Encourages proactive MFA adoption
+- Provides clear audit trail of blocked attempts
+
+**Setup:** Add the "MaxMind MFA Enforcer" authenticator to your flow between the fraud detector and MFA step. See [CONFIGURATION.md](docs/CONFIGURATION.md#mfa-enforcer-configuration) for detailed setup and configuration options.
 
 ## Querying Fraud Check Results
 
@@ -456,14 +473,14 @@ Contributions are welcome! Please see our [Contributing Guide](CONTRIBUTING.md) 
 - Pull request guidelines
 
 Quick links:
-- [Report a bug](https://github.com/zymlabs/keycloak-maxmind/issues/new?labels=bug)
-- [Request a feature](https://github.com/zymlabs/keycloak-maxmind/issues/new?labels=enhancement)
-- [View releases](https://github.com/zymlabs/keycloak-maxmind/releases)
+- [Report a bug](https://github.com/zymlabs/keycloak-maxmind-provider/issues/new?labels=bug)
+- [Request a feature](https://github.com/zymlabs/keycloak-maxmind-provider/issues/new?labels=enhancement)
+- [View releases](https://github.com/zymlabs/keycloak-maxmind-provider/releases)
 
 ## Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/your-org/keycloak-maxmind/issues
+- GitHub Issues: https://github.com/zymlabs/keycloak-maxmind-provider/issues
 - MaxMind Support: https://support.maxmind.com
 
 ## Credits

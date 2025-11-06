@@ -230,9 +230,11 @@ Browser with MaxMind
 ├── Kerberos (DISABLED)
 └── Browser with MaxMind Forms (ALTERNATIVE)
     ├── Username Password Form (REQUIRED)
-    └── MaxMind minFraud (REQUIRED)
+    ├── MaxMind minFraud (REQUIRED)
     └── OTP Form (CONDITIONAL)
 ```
+
+**Note**: If you plan to use MFA enforcement for suspicious logins, add the MaxMind MFA Enforcer in Step 5 before configuring risk actions.
 
 ### Step 4: Configure MaxMind Authenticator
 
@@ -275,7 +277,48 @@ Browser with MaxMind
 
 5. Click **Save**
 
-### Step 5: Bind the Flow
+### Step 5: Add MFA Enforcer (Recommended for CHALLENGE Actions)
+
+If you configured **Medium Risk Action** to **CHALLENGE**, add the MFA Enforcer to prevent attackers from setting up MFA during fraudulent login attempts.
+
+1. In your flow, click **Add execution** after "MaxMind minFraud"
+2. Select **MaxMind MFA Enforcer** from the dropdown
+3. Click **Add**
+4. Set the requirement to **REQUIRED**
+
+Your flow should now look like:
+```
+Browser with MaxMind
+├── Cookie (ALTERNATIVE)
+├── Kerberos (DISABLED)
+└── Browser with MaxMind Forms (ALTERNATIVE)
+    ├── Username Password Form (REQUIRED)
+    ├── MaxMind minFraud (REQUIRED)
+    ├── MaxMind MFA Enforcer (REQUIRED)       ← Blocks users without MFA
+    └── OTP Form (CONDITIONAL)
+```
+
+#### Configure MFA Enforcer (Optional)
+
+1. Click the **Actions** (⚙️) button next to "MaxMind MFA Enforcer"
+2. Click **Config**
+3. Enter an alias: "maxmind-mfa-enforcer-config"
+4. Configure **MFA Credential Types** (default: `otp,webauthn`):
+   - `otp` - TOTP/HOTP (Google Authenticator, etc.)
+   - `webauthn` - WebAuthn/FIDO2 (passkeys, security keys)
+   - `sms-otp` - SMS OTP (if SMS extension installed)
+   - Custom types from other extensions
+
+5. Click **Save**
+
+**How it works:**
+- When MaxMind detects medium-risk activity (CHALLENGE):
+  - Users **with** MFA configured → Allowed to proceed to MFA verification
+  - Users **without** MFA configured → Login blocked with security message
+
+**Why this is important:** Without the MFA Enforcer, users without MFA would be prompted to set up OTP during login. This creates a security gap where attackers could bypass fraud detection by simply setting up OTP during the attack.
+
+### Step 6: Bind the Flow
 
 1. Navigate to **Authentication** → **Bindings**
 2. Set **Browser Flow** to "Browser with MaxMind"

@@ -571,6 +571,103 @@ WHERE e.details LIKE '%maxmind_minfraud%'
 ORDER BY e.time DESC;
 ```
 
+### MFA Enforcer Events
+
+When the **MaxMind MFA Enforcer** authenticator executes, it logs events to Keycloak's event system with detailed information about MFA enforcement decisions.
+
+**Event Detail Keys**:
+
+| Detail Key | Description | Example Value |
+|-----------|-------------|---------------|
+| `maxmind_mfa_enforcer_decision` | Enforcement decision | `ALLOWED`, `BLOCKED` |
+| `maxmind_mfa_enforcer_type` | MFA type found (if ALLOWED) | `otp`, `webauthn` |
+| `maxmind_mfa_enforcer_reason` | Reason for block (if BLOCKED) | `No MFA configured` |
+| `maxmind_mfa_enforcer_risk_score` | Original fraud risk score | `65.00`, `unknown` |
+| `maxmind_mfa_enforcer_checked_types` | Credential types checked | `otp,webauthn` |
+| `auth_method` | Authentication method identifier | `maxmind_mfa_enforcer` |
+
+**Example Event Details** (ALLOWED):
+```
+maxmind_mfa_enforcer_decision=ALLOWED
+maxmind_mfa_enforcer_type=otp
+maxmind_mfa_enforcer_risk_score=45.50
+auth_method=maxmind_mfa_enforcer
+```
+
+**Example Event Details** (BLOCKED):
+```
+maxmind_mfa_enforcer_decision=BLOCKED
+maxmind_mfa_enforcer_reason=No MFA configured
+maxmind_mfa_enforcer_risk_score=65.00
+maxmind_mfa_enforcer_checked_types=otp,webauthn
+auth_method=maxmind_mfa_enforcer
+```
+
+#### Query MFA Enforcer Blocked Attempts
+
+Find users who were blocked for not having MFA during suspicious logins:
+
+```sql
+-- Users blocked by MFA Enforcer in last 7 days
+SELECT
+    to_timestamp(e.time / 1000) as event_time,
+    e.user_id,
+    u.username,
+    u.email,
+    e.ip_address,
+    SUBSTRING(e.details FROM 'maxmind_mfa_enforcer_risk_score=([0-9.]+)') as risk_score,
+    SUBSTRING(e.details FROM 'maxmind_mfa_enforcer_checked_types=([^,]+)') as checked_types
+FROM event_entity e
+JOIN user_entity u ON e.user_id = u.id
+WHERE e.details LIKE '%maxmind_mfa_enforcer_decision=BLOCKED%'
+  AND e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '7 days') * 1000
+ORDER BY e.time DESC;
+```
+
+#### Query MFA Adoption for Risk-Based Authentication
+
+Track which users have MFA and are protected from MFA Enforcer blocks:
+
+```sql
+-- MFA adoption rate among users with fraud check history
+SELECT
+    u.id,
+    u.username,
+    u.email,
+    COUNT(DISTINCT f.id) as fraud_checks,
+    MAX(f.risk_score) as max_risk_score,
+    COUNT(DISTINCT CASE WHEN c.type IN ('otp', 'webauthn') THEN c.id END) as mfa_credentials,
+    CASE
+        WHEN COUNT(DISTINCT CASE WHEN c.type IN ('otp', 'webauthn') THEN c.id END) > 0
+        THEN 'Protected'
+        ELSE 'At Risk'
+    END as mfa_status
+FROM user_entity u
+LEFT JOIN maxmind_minfraud_check f ON u.id = f.user_id
+LEFT JOIN credential c ON u.id = c.user_id
+WHERE f.timestamp > NOW() - INTERVAL '30 days'
+GROUP BY u.id, u.username, u.email
+ORDER BY max_risk_score DESC;
+```
+
+#### Monitor MFA Enforcer Effectiveness
+
+Track how many users are being blocked vs allowed:
+
+```sql
+-- MFA Enforcer decisions summary (last 24 hours)
+SELECT
+    SUBSTRING(e.details FROM 'maxmind_mfa_enforcer_decision=([A-Z]+)') as decision,
+    COUNT(*) as count,
+    COUNT(DISTINCT e.user_id) as unique_users,
+    AVG(CAST(SUBSTRING(e.details FROM 'maxmind_mfa_enforcer_risk_score=([0-9.]+)') AS DECIMAL)) as avg_risk_score
+FROM event_entity e
+WHERE e.details LIKE '%maxmind_mfa_enforcer_decision=%'
+  AND e.time > EXTRACT(EPOCH FROM NOW() - INTERVAL '24 hours') * 1000
+GROUP BY decision
+ORDER BY count DESC;
+```
+
 ### Event vs Database Trade-offs
 
 **Configuration Note**: Database recording can be disabled via the **Record Fraud Checks to Database** configuration option. When disabled, only events are logged. See [CONFIGURATION.md](CONFIGURATION.md#database-recording) for details.
@@ -585,6 +682,8 @@ ORDER BY e.time DESC;
 | **Data Structure** | Key-value in `details` | Structured columns |
 | **Storage Size** | Smaller | Larger (`raw_response` column) |
 | **Event Listeners** | Yes (real-time alerts) | No |
+
+**Note**: MFA Enforcer events are logged to `event_entity` only, not to the `maxmind_minfraud_check` table, as they represent authentication flow decisions rather than fraud check results.
 
 ### Best Practices
 
