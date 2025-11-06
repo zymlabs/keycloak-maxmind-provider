@@ -1,4 +1,4 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
 import com.maxmind.minfraud.WebServiceClient;
 import com.maxmind.minfraud.exception.HttpException;
@@ -7,7 +7,7 @@ import com.maxmind.minfraud.request.Transaction;
 import com.maxmind.minfraud.response.FactorsResponse;
 import com.maxmind.minfraud.response.InsightsResponse;
 import com.maxmind.minfraud.response.ScoreResponse;
-import com.zymlabs.keycloak.maxmind_provider.helpers.MaxMindTestData;
+import com.zymlabs.keycloak.maxmindprovider.helpers.MaxMindTestData;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

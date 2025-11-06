@@ -1,1 +1,1 @@
-com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudJpaEntityProviderFactory
+com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudJpaEntityProviderFactory

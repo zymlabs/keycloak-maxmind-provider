@@ -78,8 +78,8 @@ cp target/zymlabs-maxmind-provider.jar /path/to/keycloak/standalone/deployments/
 Check Keycloak logs for successful deployment:
 
 ```
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudCheckProviderFactory] MaxMindMinFraudCheckProviderFactory post-initialization complete
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory] MaxMindMinFraudCheckProviderFactory post-initialization complete
 ```
 
 The database table `maxmind_minfraud_check` should be automatically created via Liquibase.
@@ -113,7 +113,7 @@ Configure the following settings in the MaxMind minFraud authenticator:
 | **Service Level** | API service level (SCORE, INSIGHTS, or FACTORS) | SCORE | Yes |
 | **Enable Device Tracking** | Enable MaxMind Device Tracking JavaScript | false | No |
 | **Record Fraud Checks to Database** | Store fraud check results in database table | true | No |
-| **Low Risk Threshold** | Maximum score for low risk (0-100) | 30 | Yes |
+| **Low Risk Threshold** | Maximum score for low risk (0-100) | 5 | Yes |
 | **High Risk Threshold** | Minimum score for high risk (0-100) | 70 | Yes |
 | **Low Risk Action** | Action for low risk: ALLOW, CHALLENGE, or BLOCK | ALLOW | Yes |
 | **Medium Risk Action** | Action for medium risk | CHALLENGE | Yes |
@@ -345,7 +345,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for:
 
 ```
 keycloak-maxmind/
-├── src/main/java/com/zymlabs/keycloak/maxmind_provider/
+├── src/main/java/com/zymlabs/keycloak/maxmindprovider/
 │   ├── MaxMindMinFraudAuthenticator.java           # Main authenticator logic
 │   ├── MaxMindMinFraudAuthenticatorFactory.java    # Factory with config UI
 │   ├── MaxMindMinFraudService.java                 # MaxMind API wrapper

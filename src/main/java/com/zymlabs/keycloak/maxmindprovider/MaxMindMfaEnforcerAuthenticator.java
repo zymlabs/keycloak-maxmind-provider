@@ -1,4 +1,4 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
 import org.jboss.logging.Logger;
 import org.keycloak.authentication.AuthenticationFlowContext;

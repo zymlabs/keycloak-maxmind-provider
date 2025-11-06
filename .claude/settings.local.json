@@ -20,7 +20,9 @@
       "Bash(docker-compose up:*)",
       "Bash(docker-compose ps:*)",
       "Bash(javap:*)",
-      "Bash(docker-compose restart:*)"
+      "Bash(docker-compose restart:*)",
+      "Bash(git mv:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

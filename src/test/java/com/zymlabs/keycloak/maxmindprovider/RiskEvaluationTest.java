@@ -1,10 +1,10 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
 
 import static org.assertj.core.api.Assertions.*;
-import static com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticator.*;
+import static com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticator.*;
 
 /**
  * Tests for risk evaluation logic extracted from MaxMindMinFraudAuthenticator.

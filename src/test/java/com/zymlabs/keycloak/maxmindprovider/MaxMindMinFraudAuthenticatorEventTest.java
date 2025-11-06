@@ -1,4 +1,4 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;

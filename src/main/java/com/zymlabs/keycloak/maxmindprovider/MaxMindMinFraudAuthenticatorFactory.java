@@ -1,4 +1,4 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
 import org.keycloak.Config;
 import org.keycloak.authentication.Authenticator;

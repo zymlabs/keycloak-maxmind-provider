@@ -187,8 +187,8 @@ bin/standalone.sh -b 0.0.0.0
 Look for these log messages:
 
 ```
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudCheckProviderFactory] MaxMindMinFraudCheckProviderFactory post-initialization complete
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory] MaxMindMinFraudCheckProviderFactory post-initialization complete
 ```
 
 #### Check Database
@@ -325,9 +325,9 @@ You should see:
 Look for log entries:
 
 ```
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticator] Performing fraud check for user testuser (ID: abc-123) from IP: 192.168.1.100
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudService] Score API response: risk_score=15.5, request_id=xyz-789
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticator] Risk level: LOW (score=15.5), Action: ALLOW
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticator] Performing fraud check for user testuser (ID: abc-123) from IP: 192.168.1.100
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudService] Score API response: risk_score=15.5, request_id=xyz-789
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticator] Risk level: LOW (score=15.5), Action: ALLOW
 ```
 
 ### Step 5: Verify Event Logging (Optional but Recommended)

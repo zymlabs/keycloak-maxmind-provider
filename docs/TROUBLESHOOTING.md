@@ -700,7 +700,7 @@ Add to Keycloak logging config:
 ```bash
 # In standalone.xml or quarkus.properties
 logger.maxmind.level=DEBUG
-logger.maxmind.name=com.zymlabs.keycloak.maxmind_provider
+logger.maxmind.name=com.zymlabs.keycloak.maxmindprovider
 ```
 
 Restart Keycloak and check logs:

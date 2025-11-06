@@ -1,4 +1,4 @@
-package com.zymlabs.keycloak.maxmind_provider.helpers;
+package com.zymlabs.keycloak.maxmindprovider.helpers;
 
 import com.maxmind.minfraud.response.*;
 import java.util.UUID;

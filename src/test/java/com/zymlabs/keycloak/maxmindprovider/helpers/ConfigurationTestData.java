@@ -1,6 +1,6 @@
-package com.zymlabs.keycloak.maxmind_provider.helpers;
+package com.zymlabs.keycloak.maxmindprovider.helpers;
 
-import com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticator;
+import com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticator;
 
 import java.util.HashMap;
 import java.util.Map;

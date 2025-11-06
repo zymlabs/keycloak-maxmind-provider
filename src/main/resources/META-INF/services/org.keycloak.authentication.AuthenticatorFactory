@@ -15,5 +15,5 @@
 # limitations under the License.
 #
 
-com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticatorFactory
-com.zymlabs.keycloak.maxmind_provider.MaxMindMfaEnforcerAuthenticatorFactory
+com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticatorFactory
+com.zymlabs.keycloak.maxmindprovider.MaxMindMfaEnforcerAuthenticatorFactory

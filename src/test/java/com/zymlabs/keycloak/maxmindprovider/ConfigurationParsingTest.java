@@ -1,13 +1,13 @@
-package com.zymlabs.keycloak.maxmind_provider;
+package com.zymlabs.keycloak.maxmindprovider;
 
-import com.zymlabs.keycloak.maxmind_provider.helpers.ConfigurationTestData;
+import com.zymlabs.keycloak.maxmindprovider.helpers.ConfigurationTestData;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.*;
-import static com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudAuthenticator.*;
+import static com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudAuthenticator.*;
 
 /**
  * Tests for configuration parsing and validation.

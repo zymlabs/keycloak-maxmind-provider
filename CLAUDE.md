@@ -462,7 +462,7 @@ ORDER BY timestamp DESC LIMIT 10;
 Enable debug logging in Keycloak:
 ```
 logger.maxmind.level=DEBUG
-logger.maxmind.name=com.zymlabs.keycloak.maxmind_provider
+logger.maxmind.name=com.zymlabs.keycloak.maxmindprovider
 ```
 
 Test scenarios:
@@ -481,7 +481,7 @@ bin/kc.sh start
 
 Verify deployment in logs:
 ```
-INFO  [com.zymlabs.keycloak.maxmind_provider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
+INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory] Initializing MaxMindMinFraudCheckProviderFactory
 ```
 
 ## Key Dependencies
