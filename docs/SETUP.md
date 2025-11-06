@@ -253,6 +253,29 @@ Browser with MaxMind
 | Enable Device Tracking | true or false | false |
 | Record Fraud Checks to Database | true or false | true |
 
+#### IP Filtering Configuration
+
+| Field | Default Value | Example | Notes |
+|-------|--------------|---------|-------|
+| IP Allowlist | Internal/private ranges | 192.168.1.0/24,10.0.0.1 | IPs that bypass fraud detection |
+| IP Blocklist | (empty) | 203.0.113.0/24 | IPs that are always blocked |
+
+**Default Allowlist includes:**
+- `10.0.0.0/8` - Private network (Class A)
+- `172.16.0.0/12` - Private network (Class B)
+- `192.168.0.0/16` - Private network (Class C)
+- `127.0.0.0/8` - IPv4 loopback
+- `::1/128` - IPv6 loopback
+- `fc00::/7` - IPv6 unique local
+- `fe80::/10` - IPv6 link-local
+
+**Important Notes:**
+- Allowlist takes precedence over blocklist
+- IPs in allowlist bypass MaxMind API (no API cost)
+- Supports both IPv4 and IPv6 addresses
+- Use CIDR notation for ranges (e.g., 192.168.1.0/24)
+- Comma-separated list format
+
 #### Risk Thresholds
 
 | Field | Recommended Value | Notes |
@@ -440,6 +463,49 @@ To test blocking:
 3. Login should be blocked
 4. Reset configuration to original values
 
+### Step 7: Test IP Filtering (Optional)
+
+#### Test IP Allowlist
+
+1. Go to MaxMind authenticator config
+2. Add your current IP to the IP Allowlist field (e.g., `203.0.113.100`)
+3. Click **Save**
+4. Log out and log back in
+5. Check the database - you should see:
+   ```sql
+   SELECT * FROM maxmind_minfraud_check
+   ORDER BY timestamp DESC LIMIT 1;
+   ```
+   - `decision` should be `IP_ALLOWLIST`
+   - `risk_score` should be NULL (MaxMind API was not called)
+6. Check event details:
+   - `maxmind_minfraud_decision`: `IP_ALLOWLIST`
+   - `maxmind_minfraud_ip_filter`: `ALLOWLIST`
+
+#### Test IP Blocklist
+
+1. Go to MaxMind authenticator config
+2. Add your current IP to the IP Blocklist field
+3. Click **Save**
+4. Try to log in
+5. Login should be blocked with an error message
+6. Check the database:
+   ```sql
+   SELECT * FROM maxmind_minfraud_check
+   ORDER BY timestamp DESC LIMIT 1;
+   ```
+   - `decision` should be `IP_BLOCKLIST`
+   - `risk_score` should be NULL
+
+**Important**: Remove your IP from the blocklist after testing to regain access!
+
+#### Test Allowlist Precedence
+
+1. Add your IP to BOTH allowlist and blocklist
+2. Try to log in
+3. Login should succeed (allowlist takes precedence)
+4. Remove your IP from both lists after testing
+
 ## Production Deployment
 
 ### Security Checklist
@@ -447,7 +513,9 @@ To test blocking:
 - [ ] Use FAIL_CLOSED mode for production
 - [ ] Set strong risk thresholds based on your security requirements
 - [ ] Enable Device Tracking for enhanced detection
-- [ ] Configure IP allowlist in MaxMind portal (if using static IPs)
+- [ ] Configure IP allowlist for trusted networks (saves API costs)
+- [ ] Configure IP blocklist for known malicious IPs/regions
+- [ ] Review default internal IP allowlist (modify if needed)
 - [ ] Secure Keycloak database (contains license keys)
 - [ ] Enable HTTPS for Keycloak
 - [ ] Set up monitoring for fraud events
@@ -473,7 +541,9 @@ SELECT
     DATE(timestamp) as date,
     decision,
     COUNT(*) as count,
-    AVG(risk_score) as avg_risk_score
+    AVG(risk_score) as avg_risk_score,
+    COUNT(CASE WHEN decision = 'IP_ALLOWLIST' THEN 1 END) as allowlist_bypasses,
+    COUNT(CASE WHEN decision = 'IP_BLOCKLIST' THEN 1 END) as blocklist_blocks
 FROM maxmind_minfraud_check
 GROUP BY DATE(timestamp), decision
 ORDER BY date DESC;

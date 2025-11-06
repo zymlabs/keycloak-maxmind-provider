@@ -8,6 +8,7 @@ A Keycloak authentication extension that integrates MaxMind minFraud fraud detec
 ## Features
 
 - **Fraud Detection**: Integrate MaxMind minFraud API (Score, Insights, or Factors) into Keycloak authentication
+- **IP Allowlist/Blocklist**: Filter authentication by IP address or CIDR ranges with support for IPv4 and IPv6
 - **Device Tracking**: Optional MaxMind Device Tracking for enhanced device fingerprinting
 - **Risk-Based Actions**: Configurable actions based on risk levels (Allow, Challenge with MFA, or Block)
 - **MFA Enforcement**: Block users without MFA during suspicious logins to prevent attackers from setting up OTP during fraud attempts
@@ -44,8 +45,8 @@ Download the latest release from [GitHub Releases](https://github.com/zymlabs/ke
 **Option B: Build from Source**
 
 ```bash
-git clone https://github.com/zymlabs/keycloak-maxmind.git
-cd keycloak-maxmind
+git clone https://github.com/zymlabs/keycloak-maxmind-provider.git
+cd keycloak-maxmind-provider
 mvn clean package
 ```
 
@@ -114,6 +115,8 @@ Configure the following settings in the MaxMind minFraud authenticator:
 | **Service Level** | API service level (SCORE, INSIGHTS, or FACTORS) | SCORE | Yes |
 | **Enable Device Tracking** | Enable MaxMind Device Tracking JavaScript | false | No |
 | **Record Fraud Checks to Database** | Store fraud check results in database table | true | No |
+| **IP Allowlist** | Comma-separated IPs/CIDRs to always allow | Internal/private ranges | No |
+| **IP Blocklist** | Comma-separated IPs/CIDRs to always block | (empty) | No |
 | **Low Risk Threshold** | Maximum score for low risk (0-100) | 5 | Yes |
 | **High Risk Threshold** | Minimum score for high risk (0-100) | 70 | Yes |
 | **Low Risk Action** | Action for low risk: ALLOW, CHALLENGE, or BLOCK | ALLOW | Yes |
@@ -135,6 +138,24 @@ Configure the following settings in the MaxMind minFraud authenticator:
 - **CHALLENGE**: Require additional authentication (e.g., OTP/WebAuthn if configured)
 - **BLOCK**: Deny login with error message
 
+#### IP Filtering
+
+IP filtering allows you to bypass fraud detection or block authentication based on IP address or CIDR ranges:
+
+- **IP Allowlist**: IPs that always bypass fraud detection (no MaxMind API call)
+  - Default includes internal/private ranges: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `::1/128`, `fc00::/7`, `fe80::/10`
+  - Useful for trusted corporate networks or internal testing
+  - Takes precedence over blocklist (prevents lockout if IP is in both lists)
+
+- **IP Blocklist**: IPs that are always blocked before fraud detection
+  - Useful for known malicious IPs or geofenced regions
+  - Allowlist takes precedence if IP appears in both lists
+
+**Format**: Comma-separated list of IPs/CIDRs. Supports both IPv4 and IPv6.
+- Example: `203.0.113.0/24,198.51.100.1,2001:db8::/32`
+
+**Precedence Order**: Allowlist → Blocklist → MaxMind Fraud Check
+
 ### 4. Bind the Flow
 
 1. Navigate to **Authentication** → **Bindings**
@@ -146,7 +167,9 @@ Configure the following settings in the MaxMind minFraud authenticator:
 
 1. User attempts to log in with username/password
 2. After successful credential validation, the MaxMind authenticator executes:
-   - Collects user IP address, email, username
+   - Extracts user IP address, email, username
+   - **Checks IP allowlist**: If IP matches, authentication proceeds without MaxMind check
+   - **Checks IP blocklist**: If IP matches, authentication is blocked
    - If Device Tracking is enabled, collects device fingerprint
    - Calls MaxMind minFraud API with collected data
 3. MaxMind returns a risk score (0-100)
@@ -213,11 +236,29 @@ WHERE realm_id = 'realm-id-here'
 ORDER BY risk_score DESC;
 
 -- Count logins by decision type
+-- Decision types: ALLOW, CHALLENGE, BLOCK, ERROR, IP_ALLOWLIST, IP_BLOCKLIST
 SELECT decision, COUNT(*) as count
 FROM maxmind_minfraud_check
 WHERE realm_id = 'realm-id-here'
   AND timestamp > NOW() - INTERVAL '7 days'
 GROUP BY decision;
+
+-- View IPs bypassed by allowlist (no MaxMind API cost)
+SELECT ip_address, COUNT(*) as count, MAX(timestamp) as last_seen
+FROM maxmind_minfraud_check
+WHERE realm_id = 'realm-id-here'
+  AND decision = 'IP_ALLOWLIST'
+  AND timestamp > NOW() - INTERVAL '7 days'
+GROUP BY ip_address
+ORDER BY count DESC;
+
+-- View IPs blocked by blocklist
+SELECT ip_address, username, email, timestamp
+FROM maxmind_minfraud_check
+WHERE realm_id = 'realm-id-here'
+  AND decision = 'IP_BLOCKLIST'
+  AND timestamp > NOW() - INTERVAL '7 days'
+ORDER BY timestamp DESC;
 
 -- View full MaxMind API response
 SELECT raw_response
@@ -244,7 +285,9 @@ All fraud checks create user events with the following custom detail keys:
 |-----------------|-------------|---------------|
 | `maxmind_minfraud_risk_score` | Risk score from MaxMind (0-100) | `45.50` |
 | `maxmind_minfraud_risk_level` | Evaluated risk level | `LOW`, `MEDIUM`, `HIGH` |
-| `maxmind_minfraud_decision` | Action taken | `ALLOW`, `CHALLENGE`, `BLOCK`, `ERROR` |
+| `maxmind_minfraud_decision` | Action taken | `ALLOW`, `CHALLENGE`, `BLOCK`, `ERROR`, `IP_ALLOWLIST`, `IP_BLOCKLIST` |
+| `maxmind_minfraud_ip_filter` | IP filter result (if applicable) | `ALLOWLIST`, `BLOCKLIST`, `NONE` |
+| `maxmind_minfraud_ip_address` | IP address checked | `192.168.1.100` |
 | `maxmind_minfraud_request_id` | MaxMind API request ID | `abc123-def456-...` |
 | `maxmind_minfraud_service_level` | Service level used | `SCORE`, `INSIGHTS`, `FACTORS` |
 | `maxmind_minfraud_action` | Specific action taken | `CHALLENGE`, `BLOCK` |
@@ -447,7 +490,6 @@ keycloak-maxmind/
 - [ ] Admin UI for viewing fraud check records
 - [ ] Customizable email templates for blocked logins
 - [ ] Webhook notifications for high-risk events
-- [ ] IP allowlist/blocklist override functionality
 - [ ] Advanced analytics dashboard
 - [ ] Export fraud data for external SIEM integration
 

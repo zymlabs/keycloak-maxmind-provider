@@ -108,6 +108,23 @@ public class MaxMindMinFraudAuthenticatorFactory implements AuthenticatorFactory
                     .defaultValue("true")
                     .add()
 
+                // IP Filtering
+                .property()
+                    .name(MaxMindMinFraudAuthenticator.CONFIG_IP_ALLOWLIST)
+                    .label("IP Allowlist")
+                    .helpText("Comma-separated list of IPs/CIDRs to always allow, bypassing fraud detection. Takes precedence over blocklist. Supports IPv4 and IPv6. Default includes standard private/internal ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, ::1/128, fc00::/7, fe80::/10).")
+                    .type(ProviderConfigProperty.STRING_TYPE)
+                    .defaultValue("10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8,::1/128,fc00::/7,fe80::/10")
+                    .add()
+
+                .property()
+                    .name(MaxMindMinFraudAuthenticator.CONFIG_IP_BLOCKLIST)
+                    .label("IP Blocklist")
+                    .helpText("Comma-separated list of IPs/CIDRs to always block. Allowlist takes precedence if IP appears in both lists. Supports IPv4 (203.0.113.0/24) and IPv6 (2001:db9::/32). Example: 203.0.113.0/24,198.51.100.1")
+                    .type(ProviderConfigProperty.STRING_TYPE)
+                    .defaultValue("")
+                    .add()
+
                 // Risk Thresholds
                 .property()
                     .name(MaxMindMinFraudAuthenticator.CONFIG_LOW_RISK_THRESHOLD)

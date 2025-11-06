@@ -39,6 +39,8 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
     public static final String CONFIG_CONNECT_TIMEOUT = "connectTimeout";
     public static final String CONFIG_READ_TIMEOUT = "readTimeout";
     public static final String CONFIG_RECORD_FRAUD_CHECKS = "recordFraudChecks";
+    public static final String CONFIG_IP_ALLOWLIST = "ipAllowlist";
+    public static final String CONFIG_IP_BLOCKLIST = "ipBlocklist";
 
     // Risk actions
     public enum RiskAction {
@@ -116,6 +118,15 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
         logger.infof("Performing fraud check for user %s (ID: %s) from IP: %s",
                      user.getUsername(), userId, ipAddress);
+
+        // Check IP allowlist/blocklist before calling MaxMind API
+        IpFilterResult ipFilterResult = checkIpFilter(context, ipAddress);
+        if (ipFilterResult.shouldSkipMaxMind()) {
+            // IP filter made a decision - skip MaxMind check
+            handleIpFilterDecision(context, ipFilterResult, userId, realmId,
+                    user.getUsername(), email, ipAddress, deviceSessionId);
+            return; // Early exit
+        }
 
         // Get configuration
         AuthenticatorConfigModel config = context.getAuthenticatorConfig();
@@ -430,5 +441,132 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
      */
     static boolean shouldAllowOnFailure(FailMode failMode) {
         return failMode == FailMode.FAIL_OPEN;
+    }
+
+    /**
+     * Check if IP is in allowlist or blocklist.
+     * Allowlist takes precedence over blocklist.
+     *
+     * @param context Authentication flow context
+     * @param ipAddress IP address to check
+     * @return IpFilterResult indicating whether to skip MaxMind and what action to take
+     */
+    private IpFilterResult checkIpFilter(AuthenticationFlowContext context, String ipAddress) {
+        AuthenticatorConfigModel config = context.getAuthenticatorConfig();
+        if (config == null) {
+            return IpFilterResult.noMatch();
+        }
+
+        Map<String, String> configMap = config.getConfig();
+
+        // Check allowlist first (takes precedence)
+        String allowlist = configMap.get(CONFIG_IP_ALLOWLIST);
+        if (allowlist != null && !allowlist.trim().isEmpty()) {
+            if (IpAddressUtils.isIpInList(ipAddress, allowlist)) {
+                logger.infof("IP %s matched allowlist, bypassing fraud detection", ipAddress);
+                return IpFilterResult.allowlisted();
+            }
+        }
+
+        // Check blocklist
+        String blocklist = configMap.get(CONFIG_IP_BLOCKLIST);
+        if (blocklist != null && !blocklist.trim().isEmpty()) {
+            if (IpAddressUtils.isIpInList(ipAddress, blocklist)) {
+                logger.warnf("IP %s matched blocklist, blocking authentication", ipAddress);
+                return IpFilterResult.blocklisted();
+            }
+        }
+
+        // No match - proceed with MaxMind
+        return IpFilterResult.noMatch();
+    }
+
+    /**
+     * Handle IP filter decision (allowlist/blocklist).
+     *
+     * @param context Authentication flow context
+     * @param result IP filter result
+     * @param userId User ID
+     * @param realmId Realm ID
+     * @param username Username
+     * @param email User email
+     * @param ipAddress IP address
+     * @param deviceSessionId Device session ID (may be null)
+     */
+    private void handleIpFilterDecision(AuthenticationFlowContext context, IpFilterResult result,
+                                       String userId, String realmId, String username,
+                                       String email, String ipAddress, String deviceSessionId) {
+        // Log event with maxmind_ prefix
+        context.getEvent()
+                .detail("maxmind_minfraud_decision", result.getDecision())
+                .detail("maxmind_minfraud_ip_filter", result.getListType())
+                .detail("maxmind_minfraud_ip_address", ipAddress)
+                .detail(Details.AUTH_METHOD, "maxmind_minfraud");
+
+        // Take action
+        if (result.isAllowed()) {
+            logger.infof("IP filter: allowing authentication for %s", ipAddress);
+            context.success();
+        } else {
+            logger.warnf("IP filter: blocking authentication for %s", ipAddress);
+            Response challenge = context.form()
+                    .setAttribute("ipAddress", ipAddress)
+                    .setError("ipAddressBlocked")
+                    .createErrorPage(Response.Status.FORBIDDEN);
+            context.failure(AuthenticationFlowError.INVALID_USER, challenge);
+        }
+
+        // Retrieve event ID (available after terminal method)
+        String eventId = context.getEvent().getEvent().getId();
+
+        // Store IP filter result in database
+        storeFraudCheck(context, userId, realmId, username, email, ipAddress,
+                -1.0, result.getDecision(), deviceSessionId, null, null,
+                null, null, eventId);
+    }
+
+    /**
+     * Inner class representing the result of an IP filter check.
+     */
+    private static class IpFilterResult {
+        private final boolean skipMaxMind;
+        private final boolean allowed;
+        private final String decision;
+        private final String listType;
+
+        private IpFilterResult(boolean skipMaxMind, boolean allowed, String decision, String listType) {
+            this.skipMaxMind = skipMaxMind;
+            this.allowed = allowed;
+            this.decision = decision;
+            this.listType = listType;
+        }
+
+        static IpFilterResult noMatch() {
+            return new IpFilterResult(false, true, null, "NONE");
+        }
+
+        static IpFilterResult allowlisted() {
+            return new IpFilterResult(true, true, "IP_ALLOWLIST", "ALLOWLIST");
+        }
+
+        static IpFilterResult blocklisted() {
+            return new IpFilterResult(true, false, "IP_BLOCKLIST", "BLOCKLIST");
+        }
+
+        boolean shouldSkipMaxMind() {
+            return skipMaxMind;
+        }
+
+        boolean isAllowed() {
+            return allowed;
+        }
+
+        String getDecision() {
+            return decision;
+        }
+
+        String getListType() {
+            return listType;
+        }
     }
 }
