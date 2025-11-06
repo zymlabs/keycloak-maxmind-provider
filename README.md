@@ -19,6 +19,20 @@ A Keycloak authentication extension that integrates MaxMind minFraud fraud detec
 - **Graceful Error Handling**: Configurable fail-open or fail-closed modes for API failures
 - **Comprehensive Logging**: Detailed logs for security monitoring and debugging
 
+## Screenshots
+
+### User Experience During Login
+![Device Fingerprinting Screen](docs/maxmind-minfraud-login-device-fingerprinting.png)
+*Users see this security verification screen during fraud detection when device tracking is enabled*
+
+### Event Monitoring
+![Keycloak Events Dashboard](docs/maxmind-minfraud-user-events.png)
+*Fraud check events displayed in Keycloak Admin Console with detailed MaxMind risk assessment data including risk score, level, and decision*
+
+### Configuration
+![Provider Configuration](docs/maxmind-minfraud-browser-flow-provider-config.png)
+*MaxMind minFraud authenticator configuration screen showing all available settings including API credentials, risk thresholds, IP filtering, and actions*
+
 ## Prerequisites
 
 - **Keycloak**: Version 22.0.0 or higher (tested up to 26.x)
