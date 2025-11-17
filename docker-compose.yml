@@ -23,8 +23,15 @@ services:
       # Uncomment the line below if you want to specify JDBC parameters. The parameter below is just an example, and it shouldn't be used in production without knowledge. It is highly recommended that you read the PostgreSQL JDBC driver documentation in order to use it.
       #JDBC_PARAMS: "ssl=true"
       KEYCLOAK_LOG_LEVEL: INFO
-      KC_LOG_LEVEL_COM_ZYMLABS_KEYCLOAK_MAXMINDPROVIDER: DEBUG
       KEYCLOAK_EXTRA_ARGS: --import-realm
+
+      # Development mode settings
+      KEYCLOAK_PRODUCTION: 'false'
+      KC_HOSTNAME_STRICT: 'false'
+      KC_HOSTNAME_STRICT_HTTPS: 'false'
+      KC_HTTP_ENABLED: 'true'
+      KC_PROXY: edge
+      KC_LOG_LEVEL_COM_ZYMLABS_KEYCLOAK_MAXMINDPROVIDER: DEBUG
 
       DEBUG: 'true'
       # DEBUG_SUSPEND: 'y' # Wait for debugger to connect before starting Keycloak
@@ -37,7 +44,24 @@ services:
     depends_on:
       - postgres
 
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/realms/master"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+
     volumes:
       - ./target/zymlabs-maxmind-provider.jar:/opt/bitnami/keycloak/providers/zymlabs-maxmind-provider.jar:rw
       - ./examples/realms:/opt/bitnami/keycloak/data/import:ro
+
+  keycloak-init:
+    image: curlimages/curl:8.5.0
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    volumes:
+      - ./docker/init-keycloak.sh:/init-keycloak.sh:ro
+    entrypoint: ["/bin/sh", "/init-keycloak.sh"]
+    restart: "no"
 
