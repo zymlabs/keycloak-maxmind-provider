@@ -112,7 +112,7 @@
         <comment>Add pre-authentication mode support</comment>
 
         <!-- Make user_id nullable to support pre-auth checks -->
-        <dropNotNullConstraint tableName="maxmind_minfraud_check" columnName="user_id"/>
+        <dropNotNullConstraint tableName="maxmind_minfraud_check" columnName="user_id" columnDataType="VARCHAR(36)"/>
 
         <!-- Add session_id for correlation -->
         <addColumn tableName="maxmind_minfraud_check">
