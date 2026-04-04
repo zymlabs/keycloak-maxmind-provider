@@ -19,7 +19,7 @@
     <maven.compiler.release>17</maven.compiler.release>
 
     <!-- Keycloak dependencies -->
-		<keycloak.version>24.0.0</keycloak.version>
+		<keycloak.version>26.5.7</keycloak.version>
 
   </properties>
 
