@@ -42,6 +42,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
     public static final String CONFIG_RECORD_FRAUD_CHECKS = "recordFraudChecks";
     public static final String CONFIG_IP_ALLOWLIST = "ipAllowlist";
     public static final String CONFIG_IP_BLOCKLIST = "ipBlocklist";
+    public static final String CONFIG_API_HOST = "apiHost";
 
     // Risk actions
     public enum RiskAction {
@@ -170,7 +171,7 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
 
             // Create MaxMind service
             MaxMindMinFraudService service = new MaxMindMinFraudService(accountId, licenseKey, serviceLevel,
-                    connectTimeout, readTimeout);
+                    connectTimeout, readTimeout, configMap.get(CONFIG_API_HOST));
 
             try {
                 // Extract HTTP headers for enhanced fraud detection
