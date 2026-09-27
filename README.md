@@ -141,6 +141,7 @@ Configure the following settings in the MaxMind minFraud authenticator:
 | **API Failure Mode** | FAIL_OPEN (allow) or FAIL_CLOSED (block) on API errors | FAIL_OPEN | Yes |
 | **Connection Timeout (ms)** | Maximum time to wait for connection establishment | 3000 | No |
 | **Read Timeout (ms)** | Maximum time to wait for API response | 5000 | No |
+| **API Host** | minFraud host; `sandbox.maxmind.com` for a sandbox account | minfraud.maxmind.com | No |
 
 #### Service Levels
 
@@ -408,17 +409,21 @@ cd keycloak-maxmind
 mvn clean package
 
 # Start Keycloak with Docker Compose
-docker-compose up
+docker compose up -d
 
 # Access Keycloak at http://localhost:8080
 # Admin credentials: admin / admin
+
+# Run a different Keycloak version (use `docker compose down -v` first when downgrading,
+# since Keycloak can't downgrade an existing database)
+KEYCLOAK_VERSION=24.0.0 docker compose up -d
 ```
 
 The `docker-compose.yml` includes:
-- Keycloak 22.0.0
+- Keycloak 26.7.4 (official `quay.io/keycloak/keycloak` image, selectable with `KEYCLOAK_VERSION`)
 - PostgreSQL database
-- Automatic extension deployment to `/opt/bitnami/keycloak/providers/`
-- Volume mount for live reload during development
+- Automatic extension deployment to `/opt/keycloak/providers/`
+- A minFraud stub for the e2e tests (`--profile e2e`)
 
 Output: `target/zymlabs-maxmind-provider.jar`
 
@@ -433,7 +438,34 @@ mvn test -Dtest=RiskEvaluationTest
 
 # Run with verbose output
 mvn test -X
+
+# Compile and unit test against a specific Keycloak version
+mvn test -Dkeycloak.version=24.0.0
 ```
+
+#### End-to-End Tests (Playwright)
+
+The `e2e/` directory contains Playwright tests that drive real logins in a browser against the
+Docker Compose stack. A small stub (`e2e/stub/minfraud-stub.mjs`) stands in for the minFraud web
+service, so no MaxMind account or internet access is needed. The stub picks the risk score from a
+marker in the browser's User-Agent (`e2e-risk/low|medium|high|error`) and records every request so
+tests can check what the provider sent.
+
+```bash
+mvn package -DskipTests
+docker compose --profile e2e up -d --wait keycloak maxmind-stub
+
+cd e2e
+npm ci
+npx playwright install chromium
+npx playwright test
+```
+
+Setup imports a dedicated `maxmind-e2e` realm (`e2e/realms/maxmind-e2e-realm.json`) through the
+admin API on each run, with its authenticators pointed at the stub via the **API Host** setting.
+It covers low/medium/high risk, MFA enforcement with and without OTP, FAIL_OPEN/FAIL_CLOSED, the IP
+blocklist, device tracking fallback, and pre-auth checks with correlation. CI runs it on Keycloak
+24.0.0, 25.0.6 and 26.7.4.
 
 **Test Coverage:**
 - RiskEvaluationTest (~25 tests): Risk scoring and threshold logic

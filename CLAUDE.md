@@ -105,15 +105,23 @@ Start Keycloak and PostgreSQL with Docker Compose:
 # Build first
 mvn clean package
 
-# Start services
-docker-compose up
+# Start services (KEYCLOAK_VERSION=24.0.0 to test another version)
+docker compose up -d
 
 # Access Keycloak at http://localhost:8080
 # Admin credentials: admin / admin
 # Database: postgres:5432, keycloak/keycloak/keycloak
 ```
 
-The docker-compose setup automatically mounts the built JAR to `/opt/bitnami/keycloak/providers/` for live testing.
+The compose setup uses the official `quay.io/keycloak/keycloak` image and mounts the built JAR to `/opt/keycloak/providers/`.
+
+### E2E Tests (Playwright)
+
+`e2e/` drives real logins against the compose stack; CI runs it on Keycloak 24.0.0, 25.0.6 and 26.7.4.
+- Start with `docker compose --profile e2e up -d --wait keycloak maxmind-stub`, then `cd e2e && npx playwright test`
+- `e2e/stub/minfraud-stub.mjs` replaces minfraud.maxmind.com: the risk score comes from a `e2e-risk/low|medium|high|error` marker in the User-Agent (see `userAgentFor()`), and `GET /__requests` returns what the provider sent
+- The `maxmind-e2e` realm is re-imported by `global-setup.ts`, which binds one client per scenario to its browser flow; authenticator configs set `apiHost` to `http://maxmind-stub:8081`
+- `e2e-otp-user` has a TOTP credential whose key is the UTF-8 bytes of its stored secret; `totp()` in `tests/helpers.ts` generates codes
 
 ## Architecture Overview
 
@@ -370,8 +378,10 @@ Configurable timeouts prevent users from waiting indefinitely if MaxMind API is 
 
 **Service constructor signature**:
 ```java
-new MaxMindMinFraudService(accountId, licenseKey, serviceLevel, connectTimeoutMs, readTimeoutMs)
+new MaxMindMinFraudService(accountId, licenseKey, serviceLevel, connectTimeoutMs, readTimeoutMs, apiHost)
 ```
+
+`apiHost` (config key `apiHost`) is optional: empty means `minfraud.maxmind.com`; it also accepts `sandbox.maxmind.com`, `host:port`, or an `http://` URL for local stubs (parsed by `MaxMindMinFraudService.ApiEndpoint`).
 
 ### Event Logging
 
@@ -551,7 +561,7 @@ INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory]
 
 ## Key Dependencies
 
-- Keycloak: 24.0.0+ (provided scope - not bundled in JAR)
+- Keycloak: 24.0.0+ (provided scope - not bundled in JAR); compiled against `keycloak.version` (26.7.4) but must keep running on 24.0.0. Don't use Keycloak APIs added after 24; the CI `compatibility` matrix compiles against 24/25/26 to catch this
 - Java: 17+ required
 - MaxMind minFraud SDK: 1.16.0 (bundled)
 - Jackson: 2.15.3 (for JSON serialization of raw responses)
