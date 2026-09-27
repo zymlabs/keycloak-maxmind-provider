@@ -1,0 +1,568 @@
+{
+  "realm": "maxmind-e2e",
+  "enabled": true,
+  "sslRequired": "none",
+  "loginWithEmailAllowed": true,
+  "eventsEnabled": true,
+  "eventsExpiration": 3600,
+  "browserFlow": "e2e-browser-post-auth",
+  "authenticationFlows": [
+    {
+      "alias": "e2e-conditional-otp",
+      "description": "E2E: e2e-conditional-otp",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "conditional-user-configured"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-otp-form"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-post-auth",
+      "description": "E2E: e2e-browser-post-auth",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-browser-post-auth-forms"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-post-auth-forms",
+      "description": "E2E: e2e-browser-post-auth-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-minfraud-authenticator",
+          "authenticatorConfig": "e2e-post-auth"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-mfa-enforcer"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-conditional-otp"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-fail-closed",
+      "description": "E2E: e2e-browser-fail-closed",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-browser-fail-closed-forms"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-fail-closed-forms",
+      "description": "E2E: e2e-browser-fail-closed-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-minfraud-authenticator",
+          "authenticatorConfig": "e2e-fail-closed"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-mfa-enforcer"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-conditional-otp"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-ip-blocked",
+      "description": "E2E: e2e-browser-ip-blocked",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-browser-ip-blocked-forms"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-ip-blocked-forms",
+      "description": "E2E: e2e-browser-ip-blocked-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-minfraud-authenticator",
+          "authenticatorConfig": "e2e-ip-blocked"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-mfa-enforcer"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-conditional-otp"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-device-tracking",
+      "description": "E2E: e2e-browser-device-tracking",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-browser-device-tracking-forms"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-device-tracking-forms",
+      "description": "E2E: e2e-browser-device-tracking-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-minfraud-authenticator",
+          "authenticatorConfig": "e2e-device-tracking"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-mfa-enforcer"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-conditional-otp"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-pre-auth",
+      "description": "E2E: e2e-browser-pre-auth",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-cookie"
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-browser-pre-auth-forms"
+        }
+      ]
+    },
+    {
+      "alias": "e2e-browser-pre-auth-forms",
+      "description": "E2E: e2e-browser-pre-auth-forms",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-minfraud-authenticator",
+          "authenticatorConfig": "e2e-pre-auth"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "auth-username-password-form"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 30,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-preauth-correlator"
+        },
+        {
+          "requirement": "REQUIRED",
+          "priority": 40,
+          "userSetupAllowed": false,
+          "authenticatorFlow": false,
+          "authenticator": "maxmind-mfa-enforcer"
+        },
+        {
+          "requirement": "CONDITIONAL",
+          "priority": 50,
+          "userSetupAllowed": false,
+          "authenticatorFlow": true,
+          "flowAlias": "e2e-conditional-otp"
+        }
+      ]
+    }
+  ],
+  "authenticatorConfig": [
+    {
+      "alias": "e2e-post-auth",
+      "config": {
+        "accountId": "123456",
+        "licenseKey": "e2e-license-key",
+        "serviceLevel": "SCORE",
+        "deviceTrackingEnabled": "false",
+        "lowRiskThreshold": "30",
+        "highRiskThreshold": "70",
+        "lowRiskAction": "ALLOW",
+        "mediumRiskAction": "CHALLENGE",
+        "highRiskAction": "BLOCK",
+        "failMode": "FAIL_OPEN",
+        "connectTimeout": "3000",
+        "readTimeout": "5000",
+        "recordFraudChecks": "true",
+        "ipAllowlist": "",
+        "ipBlocklist": "",
+        "apiHost": "http://maxmind-stub:8081"
+      }
+    },
+    {
+      "alias": "e2e-fail-closed",
+      "config": {
+        "accountId": "123456",
+        "licenseKey": "e2e-license-key",
+        "serviceLevel": "SCORE",
+        "deviceTrackingEnabled": "false",
+        "lowRiskThreshold": "30",
+        "highRiskThreshold": "70",
+        "lowRiskAction": "ALLOW",
+        "mediumRiskAction": "CHALLENGE",
+        "highRiskAction": "BLOCK",
+        "failMode": "FAIL_CLOSED",
+        "connectTimeout": "3000",
+        "readTimeout": "5000",
+        "recordFraudChecks": "true",
+        "ipAllowlist": "",
+        "ipBlocklist": "",
+        "apiHost": "http://maxmind-stub:8081"
+      }
+    },
+    {
+      "alias": "e2e-ip-blocked",
+      "config": {
+        "accountId": "123456",
+        "licenseKey": "e2e-license-key",
+        "serviceLevel": "SCORE",
+        "deviceTrackingEnabled": "false",
+        "lowRiskThreshold": "30",
+        "highRiskThreshold": "70",
+        "lowRiskAction": "ALLOW",
+        "mediumRiskAction": "CHALLENGE",
+        "highRiskAction": "BLOCK",
+        "failMode": "FAIL_OPEN",
+        "connectTimeout": "3000",
+        "readTimeout": "5000",
+        "recordFraudChecks": "true",
+        "ipAllowlist": "",
+        "ipBlocklist": "0.0.0.0/0,::/0",
+        "apiHost": "http://maxmind-stub:8081"
+      }
+    },
+    {
+      "alias": "e2e-device-tracking",
+      "config": {
+        "accountId": "123456",
+        "licenseKey": "e2e-license-key",
+        "serviceLevel": "SCORE",
+        "deviceTrackingEnabled": "true",
+        "lowRiskThreshold": "30",
+        "highRiskThreshold": "70",
+        "lowRiskAction": "ALLOW",
+        "mediumRiskAction": "CHALLENGE",
+        "highRiskAction": "BLOCK",
+        "failMode": "FAIL_OPEN",
+        "connectTimeout": "3000",
+        "readTimeout": "5000",
+        "recordFraudChecks": "true",
+        "ipAllowlist": "",
+        "ipBlocklist": "",
+        "apiHost": "http://maxmind-stub:8081"
+      }
+    },
+    {
+      "alias": "e2e-pre-auth",
+      "config": {
+        "accountId": "123456",
+        "licenseKey": "e2e-license-key",
+        "serviceLevel": "SCORE",
+        "deviceTrackingEnabled": "false",
+        "lowRiskThreshold": "30",
+        "highRiskThreshold": "70",
+        "lowRiskAction": "ALLOW",
+        "mediumRiskAction": "CHALLENGE",
+        "highRiskAction": "BLOCK",
+        "failMode": "FAIL_OPEN",
+        "connectTimeout": "3000",
+        "readTimeout": "5000",
+        "recordFraudChecks": "true",
+        "ipAllowlist": "",
+        "ipBlocklist": "",
+        "apiHost": "http://maxmind-stub:8081"
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "e2e-post-auth",
+      "name": "E2E post-auth",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://e2e.test/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "e2e-fail-closed",
+      "name": "E2E fail-closed",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://e2e.test/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "e2e-ip-blocked",
+      "name": "E2E ip-blocked",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://e2e.test/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "e2e-device-tracking",
+      "name": "E2E device-tracking",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://e2e.test/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect"
+    },
+    {
+      "clientId": "e2e-pre-auth",
+      "name": "E2E pre-auth",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://e2e.test/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect"
+    }
+  ],
+  "users": [
+    {
+      "username": "e2e-user",
+      "email": "e2e-user@example.com",
+      "firstName": "E2E",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "e2e-password",
+          "temporary": false
+        }
+      ]
+    },
+    {
+      "username": "e2e-otp-user",
+      "email": "e2e-otp-user@example.com",
+      "firstName": "E2E",
+      "lastName": "User",
+      "enabled": true,
+      "emailVerified": true,
+      "credentials": [
+        {
+          "type": "password",
+          "value": "e2e-password",
+          "temporary": false
+        },
+        {
+          "type": "otp",
+          "userLabel": "e2e",
+          "secretData": "{\"value\": \"e2e-totp-secret-0123456789\"}",
+          "credentialData": "{\"subType\": \"totp\", \"digits\": 6, \"counter\": 0, \"period\": 30, \"algorithm\": \"HmacSHA1\"}"
+        }
+      ]
+    }
+  ]
+}

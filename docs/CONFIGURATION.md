@@ -519,6 +519,20 @@ Maximum time to wait for MaxMind API response after connection is established.
 - **5000ms**: Balanced (default)
 - **10000ms**: High tolerance for slow responses
 
+### API Host
+
+**Type**: String
+**Required**: No
+**Default**: `minfraud.maxmind.com`
+
+Host of the minFraud web service. Leave empty for MaxMind's production service.
+
+- **`sandbox.maxmind.com`**: MaxMind's [minFraud sandbox](https://dev.maxmind.com/minfraud/sandbox), for testing with a sandbox account
+- **`host:port`**: a different host or port over HTTPS
+- **`http://host:port`**: plain HTTP, for local stubs only. The license key is sent unencrypted, and a warning is logged
+
+The e2e tests use `http://maxmind-stub:8081` to point Keycloak at the minFraud stub.
+
 ### Timeout Behavior
 
 **Total worst-case delay**: Connection Timeout + Read Timeout (default: 8 seconds)

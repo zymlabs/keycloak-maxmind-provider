@@ -42,7 +42,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 4. **Start Local Environment**
    ```bash
-   docker-compose up
+   docker compose up
    ```
 
    Access Keycloak at http://localhost:8080 (admin/admin)
@@ -250,7 +250,7 @@ We aim for high test coverage on core logic:
 
 ```bash
 # Start local Keycloak environment
-docker-compose up -d
+docker compose up -d
 
 # Build and deploy extension
 mvn clean package

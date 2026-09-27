@@ -9,7 +9,8 @@ import com.maxmind.minfraud.request.Transaction;
 import com.maxmind.minfraud.response.*;
 import org.jboss.logging.Logger;
 
-import java.net.InetAddress;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
 
 /**
@@ -80,6 +81,41 @@ public class MaxMindMinFraudService {
     }
 
     /**
+     * Where to send minFraud requests. Parsed from the optional API host setting.
+     */
+    record ApiEndpoint(String host, int port, boolean https) {
+
+        static final String DEFAULT_HOST = "minfraud.maxmind.com";
+
+        /**
+         * Parses {@code host}, {@code host:port}, or a URL such as {@code http://stub:8081}.
+         * Blank means the MaxMind default. Only the scheme, host and port are used.
+         *
+         * @throws IllegalArgumentException if the value is not a valid host or http(s) URL
+         */
+        static ApiEndpoint parse(String value) {
+            if (value == null || value.isBlank()) {
+                return new ApiEndpoint(DEFAULT_HOST, -1, true);
+            }
+            String trimmed = value.trim();
+            URI uri;
+            try {
+                uri = new URI(trimmed.contains("://") ? trimmed : "https://" + trimmed);
+            } catch (URISyntaxException e) {
+                throw new IllegalArgumentException("Invalid MaxMind API host: " + value, e);
+            }
+            String scheme = uri.getScheme().toLowerCase();
+            if (!scheme.equals("https") && !scheme.equals("http")) {
+                throw new IllegalArgumentException("MaxMind API host must use http or https: " + value);
+            }
+            if (uri.getHost() == null) {
+                throw new IllegalArgumentException("Invalid MaxMind API host: " + value);
+            }
+            return new ApiEndpoint(uri.getHost(), uri.getPort(), scheme.equals("https"));
+        }
+    }
+
+    /**
      * Constructor for MaxMindMinFraudService.
      *
      * @param accountId MaxMind account ID
@@ -90,14 +126,35 @@ public class MaxMindMinFraudService {
      */
     public MaxMindMinFraudService(int accountId, String licenseKey, ServiceLevel serviceLevel,
                                   int connectTimeoutMs, int readTimeoutMs) {
-        this.client = new WebServiceClient.Builder(accountId, licenseKey)
+        this(accountId, licenseKey, serviceLevel, connectTimeoutMs, readTimeoutMs, null);
+    }
+
+    /**
+     * Constructor for MaxMindMinFraudService with a custom API host.
+     *
+     * @param apiHost minFraud host, e.g. {@code sandbox.maxmind.com}; null or blank for the default
+     *                ({@code minfraud.maxmind.com}). See {@link ApiEndpoint#parse(String)}.
+     */
+    public MaxMindMinFraudService(int accountId, String licenseKey, ServiceLevel serviceLevel,
+                                  int connectTimeoutMs, int readTimeoutMs, String apiHost) {
+        ApiEndpoint endpoint = ApiEndpoint.parse(apiHost);
+        WebServiceClient.Builder builder = new WebServiceClient.Builder(accountId, licenseKey)
                 .connectTimeout(connectTimeoutMs)
                 .readTimeout(readTimeoutMs)
-                .build();
+                .host(endpoint.host());
+        if (endpoint.port() > 0) {
+            builder.port(endpoint.port());
+        }
+        if (!endpoint.https()) {
+            logger.warnf("MaxMind API host %s uses plain HTTP; the license key is sent unencrypted. " +
+                         "Only use this for local testing.", endpoint.host());
+            builder.disableHttps();
+        }
+        this.client = builder.build();
         this.serviceLevel = serviceLevel;
-        logger.infof("MaxMindMinFraudService initialized with service level: %s, " +
+        logger.infof("MaxMindMinFraudService initialized with service level: %s, host: %s, " +
                      "connect timeout: %dms, read timeout: %dms",
-                     serviceLevel, connectTimeoutMs, readTimeoutMs);
+                     serviceLevel, endpoint.host(), connectTimeoutMs, readTimeoutMs);
     }
 
     /**
@@ -128,7 +185,8 @@ public class MaxMindMinFraudService {
             logger.debugf("Performing fraud check for IP: %s, Email: %s", ipAddress, email != null ? email : "none");
 
             // Build the device object
-            Device.Builder deviceBuilder = new Device.Builder(InetAddress.getByName(ipAddress));
+            // Literal only: never resolve the client address through DNS
+            Device.Builder deviceBuilder = new Device.Builder(IpAddressUtils.parseLiteral(ipAddress));
 
             if (deviceSessionId != null && !deviceSessionId.isEmpty()) {
                 deviceBuilder.sessionId(deviceSessionId);

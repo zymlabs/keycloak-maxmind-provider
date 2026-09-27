@@ -7,21 +7,27 @@
 mvn clean package
 
 # Start Keycloak and PostgreSQL
-docker-compose up -d
+docker compose up -d
+
+# Use a different Keycloak version (default 26.7.4)
+KEYCLOAK_VERSION=24.0.0 docker compose up -d
+
+# Also start the minFraud stub used by the e2e tests
+docker compose --profile e2e up -d
 
 # View logs
-docker-compose logs -f
+docker compose logs -f
 
 # Stop services
-docker-compose down
+docker compose down
 
 # Clean restart (removes all data)
-docker-compose down -v && docker-compose up -d
+docker compose down -v && docker compose up -d
 ```
 
 ## Automatic Initialization
 
-The `docker-compose.yml` includes an automatic initialization service that:
+The `docker compose.yml` includes an automatic initialization service that:
 
 1. Waits for Keycloak to be fully started and healthy
 2. Automatically disables SSL requirement for both **master** and **maxmind-demo** realms
@@ -36,6 +42,10 @@ This means **new developers can start working immediately** without manual confi
 - Admin Console: http://localhost:8080/admin
 - Admin credentials: `admin` / `admin`
 - Debug port: 5005 (for remote debugging)
+
+### minFraud stub (`--profile e2e` only)
+- URL: http://localhost:8089 (http://maxmind-stub:8081 from Keycloak)
+- `GET /__requests` lists the minFraud requests it received; see `e2e/stub/minfraud-stub.mjs`
 
 ### PostgreSQL
 - Host: localhost:5432
@@ -61,29 +71,29 @@ The `keycloak-init` container runs once on startup and exits after configuration
 ## Troubleshooting
 
 ### Init container didn't run
-Check logs: `docker-compose logs keycloak-init`
+Check logs: `docker compose logs keycloak-init`
 
 ### Keycloak not starting
-Check logs: `docker-compose logs keycloak`
+Check logs: `docker compose logs keycloak`
 
 ### Still getting SSL errors
 Restart with clean slate:
 ```bash
-docker-compose down -v
-docker-compose up -d
+docker compose down -v
+docker compose up -d
 ```
 
 ### Need to rebuild JAR
 ```bash
 mvn clean package
-docker-compose restart keycloak
+docker compose restart keycloak
 ```
 
 ## Development Workflow
 
 1. Make code changes
 2. Run `mvn clean package`
-3. Restart Keycloak: `docker-compose restart keycloak`
+3. Restart Keycloak: `docker compose restart keycloak`
 4. Test changes at http://localhost:8080
 
 The JAR is mounted as a volume, so Keycloak picks up changes on restart.

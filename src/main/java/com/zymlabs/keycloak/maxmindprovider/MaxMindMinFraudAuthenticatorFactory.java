@@ -197,6 +197,15 @@ public class MaxMindMinFraudAuthenticatorFactory implements AuthenticatorFactory
                     .defaultValue("5000")
                     .add()
 
+                .property()
+                    .name(MaxMindMinFraudAuthenticator.CONFIG_API_HOST)
+                    .label("API Host")
+                    .helpText("minFraud web service host. Leave empty for the default (minfraud.maxmind.com). " +
+                              "Set to sandbox.maxmind.com to use a MaxMind sandbox account. " +
+                              "Also accepts host:port or an http:// URL for local testing only (sends the license key unencrypted).")
+                    .type(ProviderConfigProperty.STRING_TYPE)
+                    .add()
+
                 .build();
     }
 
