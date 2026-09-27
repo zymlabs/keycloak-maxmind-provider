@@ -1,86 +1,99 @@
-mode: ContinuousDeployment
+# GitVersion 6.x configuration (migrated from 5.x)
+#
+# Mode names changed in 6.x: v5 "ContinuousDeployment" is v6 "ContinuousDelivery" (pre-release
+# number per commit), and v5 "ContinuousDelivery" is v6 "ManualDeployment".
+workflow: GitFlow/v1
+mode: ContinuousDelivery
 tag-prefix: ''
-continuous-delivery-fallback-tag: ci
+# v5 fell back to 0.1.0 before the first release tag; v6 falls back to 0.0.0
+next-version: 0.1.0
 major-version-bump-message: '\+semver:\s?(breaking|major)'
 minor-version-bump-message: '\+semver:\s?(feature|minor)'
 patch-version-bump-message: '\+semver:\s?(fix|patch)'
 no-bump-message: '\+semver:\s?(none|skip)'
-legacy-semver-padding: 4
-build-metadata-padding: 4
 commits-since-version-source-padding: 4
 tag-pre-release-weight: 60000
 commit-message-incrementing: Enabled
 
 branches:
-  master:
+  main:
     regex: ^master$|^main$
-    mode: ContinuousDelivery
-    tag: ''
+    # Clean X.Y.Z with no pre-release counter; releases are cut by tagging master
+    mode: ContinuousDeployment
+    label: ''
     increment: Patch
-    prevent-increment-of-merged-branch-version: true
+    prevent-increment:
+      of-merged-branch: true
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: true
-    is-mainline: true
+    is-main-branch: true
     pre-release-weight: 55000
 
   develop:
     regex: ^develop$|^dev(elop)?(ment)?$
-    mode: ContinuousDeployment
-    tag: alpha
+    mode: ContinuousDelivery
+    label: alpha
     increment: Minor
-    prevent-increment-of-merged-branch-version: false
+    prevent-increment:
+      of-merged-branch: false
+      # GitFlow/v1 disables this for develop; reuse the version already tagged on HEAD
+      when-current-commit-tagged: true
     track-merge-target: true
     tracks-release-branches: true
     is-release-branch: false
-    is-mainline: false
+    is-main-branch: false
     pre-release-weight: 0
 
   feature:
-    regex: ^features?[/-](?<branchName>.+)
-    mode: ContinuousDeployment
-    tag: alpha.{branchName}
+    regex: ^features?[/-](?<BranchName>.+)
+    mode: ContinuousDelivery
+    label: 'alpha.{BranchName}'
     increment: Inherit
-    prevent-increment-of-merged-branch-version: false
+    prevent-increment:
+      of-merged-branch: false
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: false
-    is-mainline: false
+    is-main-branch: false
 
   hotfix:
-    regex: ^hotfix(es)?[/-](?<branchName>.+)
-    mode: ContinuousDeployment
-    tag: beta
+    regex: ^hotfix(es)?[/-](?<BranchName>.+)
+    mode: ContinuousDelivery
+    label: beta
     increment: Patch
-    prevent-increment-of-merged-branch-version: false
+    prevent-increment:
+      of-merged-branch: false
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: false
-    is-mainline: false
+    is-main-branch: false
     pre-release-weight: 30000
 
   release:
-    regex: ^releases?[/-](?<branchName>.+)
-    mode: ContinuousDeployment
-    tag: beta
+    regex: ^releases?[/-](?<BranchName>.+)
+    mode: ContinuousDelivery
+    label: beta
     increment: None
-    prevent-increment-of-merged-branch-version: true
+    prevent-increment:
+      of-merged-branch: true
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: true
-    is-mainline: false
+    is-main-branch: false
     pre-release-weight: 30000
 
   pull-request:
-    regex: ^(pull|pull\-requests|pr)[/-]
-    mode: ContinuousDeployment
-    tag: PullRequest
+    regex: ^(pull|pull\-requests|pr)[/-](?<Number>\d*)
+    mode: ContinuousDelivery
+    label: 'PullRequest{Number}'
     increment: Inherit
-    prevent-increment-of-merged-branch-version: false
+    prevent-increment:
+      of-merged-branch: false
     track-merge-target: false
     tracks-release-branches: false
     is-release-branch: false
-    is-mainline: false
+    is-main-branch: false
 
 ignore:
   sha: []
