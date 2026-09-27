@@ -183,6 +183,23 @@ class MaxMindMinFraudServiceTest {
     }
 
     @Test
+    @DisplayName("Check fraud with a hostname as the client address should be rejected without calling MaxMind")
+    void testCheckFraud_HostnameIsNotResolved() throws Exception {
+        // Given
+        MaxMindMinFraudService service = new MaxMindMinFraudService(mockClient,
+                MaxMindMinFraudService.ServiceLevel.SCORE);
+
+        // When
+        MaxMindMinFraudService.FraudCheckResult result =
+                service.checkFraud("localhost", null, null, null, null, null);
+
+        // Then
+        assertThat(result.isSuccess()).isFalse();
+        assertThat(result.getErrorMessage()).contains("Invalid IP address");
+        verify(mockClient, never()).score(any(Transaction.class));
+    }
+
+    @Test
     @DisplayName("Check fraud with API HttpException should return error result")
     void testCheckFraud_HttpException() throws Exception {
         // Given
