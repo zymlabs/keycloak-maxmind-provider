@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - Build against Keycloak 26.7.4 (was 24.0.0); Keycloak 24.0.0 remains the minimum supported version
+- Upgraded the MaxMind minFraud SDK from 1.16 to 4.4. It uses the JDK HTTP client, so Apache httpclient is no longer bundled. Its Jackson is bundled and relocated so it can't conflict with Keycloak's (this replaces the unrelocated, vulnerable jackson-databind 2.15.3). minFraud clients are reused per configuration instead of being created for every login
+- `raw_response` is stored using the SDK's own JSON serialization, and timeout errors read `request timed out` / `HTTP connect timed out`
 - Docker Compose uses the official `quay.io/keycloak/keycloak` image (was `bitnamilegacy/keycloak`), selectable with `KEYCLOAK_VERSION`, and waits for Postgres to be healthy
 - Migrated GitVersion from 5.x to 6.8 (`gittools/actions@v4`). Release versions are unchanged; develop pre-release numbers now increase by one per commit, and feature branch versions include the branch name
 - Updated test dependencies, Maven plugins and GitHub Actions
