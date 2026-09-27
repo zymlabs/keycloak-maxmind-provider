@@ -539,7 +539,7 @@ The e2e tests use `http://maxmind-stub:8081` to point Keycloak at the minFraud s
 
 When a timeout occurs:
 1. API call is aborted
-2. Error logged: "API error: Read timed out" or "API error: Connection timed out"
+2. Error logged: "API error: request timed out" or "API error: HTTP connect timed out"
 3. Fraud check stored with `error_message` set
 4. Configured **Fail Mode** determines whether to ALLOW or BLOCK login
 

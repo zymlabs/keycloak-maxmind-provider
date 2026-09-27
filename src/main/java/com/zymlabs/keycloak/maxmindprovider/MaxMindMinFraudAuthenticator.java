@@ -173,99 +173,95 @@ public class MaxMindMinFraudAuthenticator implements Authenticator {
             MaxMindMinFraudService service = new MaxMindMinFraudService(accountId, licenseKey, serviceLevel,
                     connectTimeout, readTimeout, configMap.get(CONFIG_API_HOST));
 
+            // Extract HTTP headers for enhanced fraud detection
+            String userAgent = null;
+            String acceptLanguage = null;
+
             try {
-                // Extract HTTP headers for enhanced fraud detection
-                String userAgent = null;
-                String acceptLanguage = null;
-
-                try {
-                    List<String> userAgentList = context.getHttpRequest()
-                            .getHttpHeaders().getRequestHeader("User-Agent");
-                    if (userAgentList != null && !userAgentList.isEmpty()) {
-                        userAgent = userAgentList.get(0);
-                        logger.debugf("Extracted User-Agent header: %s", userAgent);
-                    }
-
-                    List<String> acceptLanguageList = context.getHttpRequest()
-                            .getHttpHeaders().getRequestHeader("Accept-Language");
-                    if (acceptLanguageList != null && !acceptLanguageList.isEmpty()) {
-                        acceptLanguage = acceptLanguageList.get(0);
-                        logger.debugf("Extracted Accept-Language header: %s", acceptLanguage);
-                    }
-                } catch (Exception e) {
-                    logger.warnf(e, "Error extracting HTTP headers, continuing without them");
+                List<String> userAgentList = context.getHttpRequest()
+                        .getHttpHeaders().getRequestHeader("User-Agent");
+                if (userAgentList != null && !userAgentList.isEmpty()) {
+                    userAgent = userAgentList.get(0);
+                    logger.debugf("Extracted User-Agent header: %s", userAgent);
                 }
 
-                // Call MaxMind API with all available parameters
-                MaxMindMinFraudService.FraudCheckResult result = service.checkFraud(
-                        ipAddress, email, deviceSessionId, userAgent, acceptLanguage, sessionId);
+                List<String> acceptLanguageList = context.getHttpRequest()
+                        .getHttpHeaders().getRequestHeader("Accept-Language");
+                if (acceptLanguageList != null && !acceptLanguageList.isEmpty()) {
+                    acceptLanguage = acceptLanguageList.get(0);
+                    logger.debugf("Extracted Accept-Language header: %s", acceptLanguage);
+                }
+            } catch (Exception e) {
+                logger.warnf(e, "Error extracting HTTP headers, continuing without them");
+            }
 
-                if (result.isSuccess()) {
-                    double riskScore = result.getRiskScore();
-                    logger.infof("Fraud check completed: risk_score=%f, request_id=%s", riskScore, result.getRequestId());
+            // Call MaxMind API with all available parameters
+            MaxMindMinFraudService.FraudCheckResult result = service.checkFraud(
+                    ipAddress, email, deviceSessionId, userAgent, acceptLanguage, sessionId);
 
-                    // Determine risk level and action using extracted helper methods
-                    String riskLevel = evaluateRiskLevel(riskScore, lowRiskThreshold, highRiskThreshold);
-                    RiskAction action = determineRiskAction(riskLevel, lowRiskAction, mediumRiskAction, highRiskAction);
+            if (result.isSuccess()) {
+                double riskScore = result.getRiskScore();
+                logger.infof("Fraud check completed: risk_score=%f, request_id=%s", riskScore, result.getRequestId());
 
-                    logger.infof("Risk level: %s (score=%f), Action: %s", riskLevel, riskScore, action);
+                // Determine risk level and action using extracted helper methods
+                String riskLevel = evaluateRiskLevel(riskScore, lowRiskThreshold, highRiskThreshold);
+                RiskAction action = determineRiskAction(riskLevel, lowRiskAction, mediumRiskAction, highRiskAction);
 
-                    // Log event for successful fraud check
-                    context.getEvent()
-                            .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
-                            .detail("maxmind_minfraud_risk_level", riskLevel)
-                            .detail("maxmind_minfraud_decision", action.name())
-                            .detail("maxmind_minfraud_request_id", result.getRequestId())
-                            .detail("maxmind_minfraud_service_level", serviceLevel.name())
-                            .detail("maxmind_minfraud_device_session_id", deviceSessionId != null ? deviceSessionId : "")
-                            .detail(Details.AUTH_METHOD, "maxmind_minfraud");
+                logger.infof("Risk level: %s (score=%f), Action: %s", riskLevel, riskScore, action);
 
-                    // Take action based on risk level (this calls terminal methods and persists events)
-                    handleRiskAction(context, action, riskScore, isPreAuth);
+                // Log event for successful fraud check
+                context.getEvent()
+                        .detail("maxmind_minfraud_risk_score", String.format("%.2f", riskScore))
+                        .detail("maxmind_minfraud_risk_level", riskLevel)
+                        .detail("maxmind_minfraud_decision", action.name())
+                        .detail("maxmind_minfraud_request_id", result.getRequestId())
+                        .detail("maxmind_minfraud_service_level", serviceLevel.name())
+                        .detail("maxmind_minfraud_device_session_id", deviceSessionId != null ? deviceSessionId : "")
+                        .detail(Details.AUTH_METHOD, "maxmind_minfraud");
 
-                    // Retrieve event ID (available after terminal method)
-                    String eventId = context.getEvent().getEvent().getId();
+                // Take action based on risk level (this calls terminal methods and persists events)
+                handleRiskAction(context, action, riskScore, isPreAuth);
 
-                    // Store fraud check result with event ID
-                    storeFraudCheck(context, userId, realmId, username, email, ipAddress,
-                                  riskScore, action.name(), deviceSessionId, result.getRequestId(),
-                                  result.getRawResponse(), serviceLevel.name(), null, eventId,
-                                  sessionId, isPreAuth);
+                // Retrieve event ID (available after terminal method)
+                String eventId = context.getEvent().getEvent().getId();
 
+                // Store fraud check result with event ID
+                storeFraudCheck(context, userId, realmId, username, email, ipAddress,
+                              riskScore, action.name(), deviceSessionId, result.getRequestId(),
+                              result.getRawResponse(), serviceLevel.name(), null, eventId,
+                              sessionId, isPreAuth);
+
+            } else {
+                // API call failed
+                logger.errorf("MaxMind API call failed: %s", result.getErrorMessage());
+
+                // Log event for API failure
+                context.getEvent()
+                        .detail("maxmind_minfraud_error", result.getErrorMessage())
+                        .detail("maxmind_minfraud_decision", "ERROR")
+                        .detail("maxmind_minfraud_service_level", serviceLevel.name())
+                        .detail(Details.AUTH_METHOD, "maxmind_minfraud")
+                        .error("maxmind_api_error"); // Explicitly persist error event
+
+                // Handle based on fail mode (this calls terminal methods)
+                if (failMode == FailMode.FAIL_CLOSED) {
+                    logger.warn("Fail-closed mode: blocking login due to API error");
+                    Response challenge = context.form()
+                            .setError("maxmindApiError")
+                            .createErrorPage(Response.Status.FORBIDDEN);
+                    context.failure(AuthenticationFlowError.GENERIC_AUTHENTICATION_ERROR, challenge);
                 } else {
-                    // API call failed
-                    logger.errorf("MaxMind API call failed: %s", result.getErrorMessage());
-
-                    // Log event for API failure
-                    context.getEvent()
-                            .detail("maxmind_minfraud_error", result.getErrorMessage())
-                            .detail("maxmind_minfraud_decision", "ERROR")
-                            .detail("maxmind_minfraud_service_level", serviceLevel.name())
-                            .detail(Details.AUTH_METHOD, "maxmind_minfraud")
-                            .error("maxmind_api_error"); // Explicitly persist error event
-
-                    // Handle based on fail mode (this calls terminal methods)
-                    if (failMode == FailMode.FAIL_CLOSED) {
-                        logger.warn("Fail-closed mode: blocking login due to API error");
-                        Response challenge = context.form()
-                                .setError("maxmindApiError")
-                                .createErrorPage(Response.Status.FORBIDDEN);
-                        context.failure(AuthenticationFlowError.GENERIC_AUTHENTICATION_ERROR, challenge);
-                    } else {
-                        logger.warn("Fail-open mode: allowing login despite API error");
-                        context.success();
-                    }
-
-                    // Retrieve event ID (available after terminal method)
-                    String eventId = context.getEvent().getEvent().getId();
-
-                    // Store error with event ID
-                    storeFraudCheck(context, userId, realmId, username, email, ipAddress,
-                                  -1.0, "ERROR", deviceSessionId, null, null, serviceLevel.name(),
-                                  result.getErrorMessage(), eventId, sessionId, isPreAuth);
+                    logger.warn("Fail-open mode: allowing login despite API error");
+                    context.success();
                 }
-            } finally {
-                service.close();
+
+                // Retrieve event ID (available after terminal method)
+                String eventId = context.getEvent().getEvent().getId();
+
+                // Store error with event ID
+                storeFraudCheck(context, userId, realmId, username, email, ipAddress,
+                              -1.0, "ERROR", deviceSessionId, null, null, serviceLevel.name(),
+                              result.getErrorMessage(), eventId, sessionId, isPreAuth);
             }
 
         } catch (Exception e) {

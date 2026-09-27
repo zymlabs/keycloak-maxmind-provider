@@ -366,7 +366,7 @@ Configurable timeouts prevent users from waiting indefinitely if MaxMind API is 
 
 **Read Timeout** (default 5000ms):
 - Maximum time to wait for API response after connection established
-- Applied via `WebServiceClient.Builder.readTimeout(Duration.ofMillis(...))`
+- Applied via `WebServiceClient.Builder.requestTimeout(Duration.ofMillis(...))` (SDK 4.x name; covers the whole response)
 
 **Worst-case delay**: Connection timeout + Read timeout = 8 seconds (with defaults)
 
@@ -563,8 +563,9 @@ INFO  [com.zymlabs.keycloak.maxmindprovider.MaxMindMinFraudCheckProviderFactory]
 
 - Keycloak: 24.0.0+ (provided scope - not bundled in JAR); compiled against `keycloak.version` (26.7.4) but must keep running on 24.0.0. Don't use Keycloak APIs added after 24; the CI `compatibility` matrix compiles against 24/25/26 to catch this
 - Java: 17+ required
-- MaxMind minFraud SDK: 1.16.0 (bundled)
-- Jackson: 2.15.3 (for JSON serialization of raw responses)
+- MaxMind minFraud SDK: 4.4.0 (bundled; uses the JDK HTTP client). Raw responses are stored via the SDK's `toJson()`
+- Jackson: whatever minfraud needs (2.22.x), bundled and relocated to `com.zymlabs.keycloak.maxmindprovider.shaded.jackson` together with `com.maxmind`, because it's newer than the Jackson any supported Keycloak ships. Provider code must not use Jackson directly
+- `WebServiceClient` instances are cached per configuration in `MaxMindMinFraudService` (the JDK HttpClient can't be closed on Java 17), so don't create clients per request
 - Jakarta EE APIs: jakarta.ws.rs, jakarta.persistence (provided by Keycloak 24+)
 
 All Keycloak dependencies use `provided` scope since they're available in the Keycloak runtime.

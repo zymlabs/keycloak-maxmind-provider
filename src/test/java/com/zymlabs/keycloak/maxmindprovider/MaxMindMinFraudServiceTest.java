@@ -52,16 +52,19 @@ class MaxMindMinFraudServiceTest {
     private static final String LICENSE_KEY = "test_license_key";
 
     @BeforeEach
-    void setup() {
-        // Setup common mock responses
-        when(mockScoreResponse.getRiskScore()).thenReturn(15.5);
-        when(mockScoreResponse.getId()).thenReturn(UUID.randomUUID());
+    void setup() throws IOException {
+        // Setup common mock responses (the SDK's responses are records; the service uses their accessors and toJson())
+        when(mockScoreResponse.riskScore()).thenReturn(15.5);
+        when(mockScoreResponse.id()).thenReturn(UUID.randomUUID());
+        when(mockScoreResponse.toJson()).thenReturn("{\"risk_score\":15.5}");
 
-        when(mockInsightsResponse.getRiskScore()).thenReturn(45.0);
-        when(mockInsightsResponse.getId()).thenReturn(UUID.randomUUID());
+        when(mockInsightsResponse.riskScore()).thenReturn(45.0);
+        when(mockInsightsResponse.id()).thenReturn(UUID.randomUUID());
+        when(mockInsightsResponse.toJson()).thenReturn("{\"risk_score\":45.0}");
 
-        when(mockFactorsResponse.getRiskScore()).thenReturn(75.0);
-        when(mockFactorsResponse.getId()).thenReturn(UUID.randomUUID());
+        when(mockFactorsResponse.riskScore()).thenReturn(75.0);
+        when(mockFactorsResponse.id()).thenReturn(UUID.randomUUID());
+        when(mockFactorsResponse.toJson()).thenReturn("{\"risk_score\":75.0}");
     }
 
     @Test
@@ -80,7 +83,7 @@ class MaxMindMinFraudServiceTest {
         assertThat(result.isSuccess()).isTrue();
         assertThat(result.getRiskScore()).isEqualTo(15.5);
         assertThat(result.getRequestId()).isNotNull();
-        assertThat(result.getRawResponse()).isNotNull();
+        assertThat(result.getRawResponse()).isEqualTo("{\"risk_score\":15.5}");
         verify(mockClient).score(any(Transaction.class));
         verify(mockClient, never()).insights(any());
         verify(mockClient, never()).factors(any());
@@ -287,14 +290,39 @@ class MaxMindMinFraudServiceTest {
     }
 
     @Test
-    @DisplayName("Service close should not throw exception")
-    void testServiceClose() {
+    @DisplayName("Clients should be shared between services with the same configuration")
+    void testClientReusedForSameConfig() {
         // Given
-        MaxMindMinFraudService service = new MaxMindMinFraudService(mockClient,
-                MaxMindMinFraudService.ServiceLevel.SCORE);
+        MaxMindMinFraudService.ClientConfig config = new MaxMindMinFraudService.ClientConfig(
+                ACCOUNT_ID, LICENSE_KEY, MaxMindMinFraudService.ApiEndpoint.parse("http://stub:8081"), 1000, 2000);
 
         // When/Then
-        assertThatCode(service::close).doesNotThrowAnyException();
+        assertThat(MaxMindMinFraudService.clientFor(config))
+                .isSameAs(MaxMindMinFraudService.clientFor(config));
+    }
+
+    @Test
+    @DisplayName("A configuration change should create a new client")
+    void testNewClientForChangedConfig() {
+        // Given
+        MaxMindMinFraudService.ApiEndpoint endpoint = MaxMindMinFraudService.ApiEndpoint.parse("http://stub:8081");
+        MaxMindMinFraudService.ClientConfig original =
+                new MaxMindMinFraudService.ClientConfig(ACCOUNT_ID, LICENSE_KEY, endpoint, 1000, 2000);
+        MaxMindMinFraudService.ClientConfig newKey =
+                new MaxMindMinFraudService.ClientConfig(ACCOUNT_ID, "rotated_license_key", endpoint, 1000, 2000);
+
+        // When/Then
+        assertThat(MaxMindMinFraudService.clientFor(original))
+                .isNotSameAs(MaxMindMinFraudService.clientFor(newKey));
+    }
+
+    @Test
+    @DisplayName("Client config should never include the license key in its string form")
+    void testClientConfigHidesLicenseKey() {
+        MaxMindMinFraudService.ClientConfig config = new MaxMindMinFraudService.ClientConfig(
+                ACCOUNT_ID, LICENSE_KEY, MaxMindMinFraudService.ApiEndpoint.parse(null), 1000, 2000);
+
+        assertThat(config.toString()).doesNotContain(LICENSE_KEY);
     }
 
     @Test
