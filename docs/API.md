@@ -33,7 +33,7 @@ HTTP Basic Authentication using:
 This extension uses the official MaxMind minFraud Java SDK:
 - Group ID: `com.maxmind.minfraud`
 - Artifact ID: `minfraud`
-- Version: 1.16.0
+- Version: 4.4.0 (bundled in the provider JAR, with its Jackson dependency relocated so it can't conflict with Keycloak's)
 - Documentation: https://maxmind.github.io/minfraud-api-java/
 
 ## Service Levels

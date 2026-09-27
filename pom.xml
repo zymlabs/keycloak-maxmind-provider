@@ -81,25 +81,12 @@
 			<scope>provided</scope>
 		</dependency>
 
-		<!-- MaxMind minFraud SDK -->
+		<!-- MaxMind minFraud SDK (bundled). Uses the JDK HTTP client, and brings its own Jackson,
+		     which is bundled and relocated below so it can't clash with Keycloak's Jackson. -->
 		<dependency>
 			<groupId>com.maxmind.minfraud</groupId>
 			<artifactId>minfraud</artifactId>
-			<version>1.16.0</version>
-		</dependency>
-
-		<!-- HTTP Client (used by MaxMind SDK) -->
-		<dependency>
-			<groupId>org.apache.httpcomponents</groupId>
-			<artifactId>httpclient</artifactId>
-			<version>4.5.14</version>
-		</dependency>
-
-		<!-- JSON Processing -->
-		<dependency>
-			<groupId>com.fasterxml.jackson.core</groupId>
-			<artifactId>jackson-databind</artifactId>
-			<version>2.15.3</version>
+			<version>4.4.0</version>
 		</dependency>
 
 		<!-- Hibernate JPA (provided by Keycloak; the code uses jakarta.persistence, i.e. Hibernate 6+) -->
@@ -206,23 +193,26 @@
                   <include>com.maxmind.geoip2:geoip2</include>
                   <include>com.maxmind.db:maxmind-db</include>
 
-                  <!-- Apache Commons libraries -->
-                  <include>commons-codec:commons-codec</include>
-                  <include>commons-beanutils:commons-beanutils</include>
-                  <include>commons-collections:commons-collections</include>
-                  <include>commons-validator:commons-validator</include>
-                  <include>commons-digester:commons-digester</include>
-                  <include>commons-logging:commons-logging</include>
-
-                  <!-- Apache HttpClient -->
-                  <include>org.apache.httpcomponents:httpclient</include>
-                  <include>org.apache.httpcomponents:httpcore</include>
-
-                  <!-- Jackson libraries -->
+                  <!-- The complete Jackson the SDK was built against (relocated below) -->
+                  <include>com.fasterxml.jackson.core:jackson-core</include>
                   <include>com.fasterxml.jackson.core:jackson-databind</include>
+                  <include>com.fasterxml.jackson.core:jackson-annotations</include>
                   <include>com.fasterxml.jackson.datatype:jackson-datatype-jsr310</include>
                 </includes>
               </artifactSet>
+              <!-- Keycloak ships its own (older) Jackson and could ship other MaxMind libraries in future.
+                   Relocating keeps the bundled copies private to this provider instead of competing on
+                   Keycloak's classpath. -->
+              <relocations>
+                <relocation>
+                  <pattern>com.fasterxml.jackson</pattern>
+                  <shadedPattern>com.zymlabs.keycloak.maxmindprovider.shaded.jackson</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>com.maxmind</pattern>
+                  <shadedPattern>com.zymlabs.keycloak.maxmindprovider.shaded.maxmind</shadedPattern>
+                </relocation>
+              </relocations>
               <transformers>
                 <!-- Preserve service files for SPI -->
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

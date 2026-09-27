@@ -1,6 +1,5 @@
 package com.zymlabs.keycloak.maxmindprovider;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.maxmind.minfraud.WebServiceClient;
 import com.maxmind.minfraud.request.Device;
 import com.maxmind.minfraud.request.Email;
@@ -12,6 +11,9 @@ import org.jboss.logging.Logger;
 import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.net.UnknownHostException;
 
 /**
@@ -23,7 +25,24 @@ import java.net.UnknownHostException;
 public class MaxMindMinFraudService {
 
     private static final Logger logger = Logger.getLogger(MaxMindMinFraudService.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * One client per distinct configuration. The SDK client wraps a JDK HttpClient, which can't be
+     * closed on Java 17 and holds a selector thread until garbage collected, so it is reused across
+     * logins instead of being created per request. Entries are only added when an authenticator
+     * config changes, so the map stays tiny.
+     */
+    private static final Map<ClientConfig, WebServiceClient> CLIENTS = new ConcurrentHashMap<>();
+
+    record ClientConfig(int accountId, String licenseKey, ApiEndpoint endpoint,
+                        int connectTimeoutMs, int readTimeoutMs) {
+        @Override
+        public String toString() {
+            // Never log the license key
+            return "ClientConfig[accountId=" + accountId + ", endpoint=" + endpoint +
+                   ", connectTimeoutMs=" + connectTimeoutMs + ", readTimeoutMs=" + readTimeoutMs + "]";
+        }
+    }
 
     private final WebServiceClient client;
     private final ServiceLevel serviceLevel;
@@ -138,10 +157,23 @@ public class MaxMindMinFraudService {
      */
     public MaxMindMinFraudService(int accountId, String licenseKey, ServiceLevel serviceLevel,
                                   int connectTimeoutMs, int readTimeoutMs, String apiHost) {
-        ApiEndpoint endpoint = ApiEndpoint.parse(apiHost);
-        WebServiceClient.Builder builder = new WebServiceClient.Builder(accountId, licenseKey)
-                .connectTimeout(connectTimeoutMs)
-                .readTimeout(readTimeoutMs)
+        this(clientFor(new ClientConfig(accountId, licenseKey, ApiEndpoint.parse(apiHost),
+                                        connectTimeoutMs, readTimeoutMs)), serviceLevel);
+    }
+
+    /**
+     * Returns the shared client for a configuration, creating it on first use.
+     */
+    static WebServiceClient clientFor(ClientConfig config) {
+        return CLIENTS.computeIfAbsent(config, MaxMindMinFraudService::buildClient);
+    }
+
+    private static WebServiceClient buildClient(ClientConfig config) {
+        ApiEndpoint endpoint = config.endpoint();
+        WebServiceClient.Builder builder = new WebServiceClient.Builder(config.accountId(), config.licenseKey())
+                .connectTimeout(Duration.ofMillis(config.connectTimeoutMs()))
+                // The SDK's request timeout covers the whole response, like the old read timeout
+                .requestTimeout(Duration.ofMillis(config.readTimeoutMs()))
                 .host(endpoint.host());
         if (endpoint.port() > 0) {
             builder.port(endpoint.port());
@@ -151,11 +183,10 @@ public class MaxMindMinFraudService {
                          "Only use this for local testing.", endpoint.host());
             builder.disableHttps();
         }
-        this.client = builder.build();
-        this.serviceLevel = serviceLevel;
-        logger.infof("MaxMindMinFraudService initialized with service level: %s, host: %s, " +
+        logger.infof("Created MaxMind minFraud client for account %d, host: %s, " +
                      "connect timeout: %dms, read timeout: %dms",
-                     serviceLevel, endpoint.host(), connectTimeoutMs, readTimeoutMs);
+                     config.accountId(), endpoint.host(), config.connectTimeoutMs(), config.readTimeoutMs());
+        return builder.build();
     }
 
     /**
@@ -228,41 +259,38 @@ public class MaxMindMinFraudService {
             Transaction transaction = transactionBuilder.build();
 
             // Call appropriate API based on service level
-            Object response;
+            String rawResponse;
             double riskScore;
             String requestId;
 
             switch (serviceLevel) {
                 case SCORE:
                     ScoreResponse scoreResponse = client.score(transaction);
-                    riskScore = scoreResponse.getRiskScore();
-                    requestId = scoreResponse.getId().toString();
-                    response = scoreResponse;
+                    riskScore = scoreResponse.riskScore();
+                    requestId = scoreResponse.id().toString();
+                    rawResponse = scoreResponse.toJson();
                     logger.debugf("Score API response: risk_score=%f, request_id=%s", riskScore, requestId);
                     break;
 
                 case INSIGHTS:
                     InsightsResponse insightsResponse = client.insights(transaction);
-                    riskScore = insightsResponse.getRiskScore();
-                    requestId = insightsResponse.getId().toString();
-                    response = insightsResponse;
+                    riskScore = insightsResponse.riskScore();
+                    requestId = insightsResponse.id().toString();
+                    rawResponse = insightsResponse.toJson();
                     logger.debugf("Insights API response: risk_score=%f, request_id=%s", riskScore, requestId);
                     break;
 
                 case FACTORS:
                     FactorsResponse factorsResponse = client.factors(transaction);
-                    riskScore = factorsResponse.getRiskScore();
-                    requestId = factorsResponse.getId().toString();
-                    response = factorsResponse;
+                    riskScore = factorsResponse.riskScore();
+                    requestId = factorsResponse.id().toString();
+                    rawResponse = factorsResponse.toJson();
                     logger.debugf("Factors API response: risk_score=%f, request_id=%s", riskScore, requestId);
                     break;
 
                 default:
                     throw new IllegalStateException("Unsupported service level: " + serviceLevel);
             }
-
-            // Serialize response to JSON
-            String rawResponse = objectMapper.writeValueAsString(response);
 
             return new FraudCheckResult(riskScore, requestId, rawResponse);
 
@@ -272,19 +300,6 @@ public class MaxMindMinFraudService {
         } catch (Exception e) {
             logger.errorf(e, "Error calling MaxMind minFraud API");
             return new FraudCheckResult("API error: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Close the WebServiceClient and release resources.
-     */
-    public void close() {
-        try {
-            if (client != null) {
-                client.close();
-            }
-        } catch (Exception e) {
-            logger.warnf(e, "Error closing MaxMind WebServiceClient");
         }
     }
 }
