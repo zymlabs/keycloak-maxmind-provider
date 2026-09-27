@@ -9,7 +9,6 @@ import com.maxmind.minfraud.request.Transaction;
 import com.maxmind.minfraud.response.*;
 import org.jboss.logging.Logger;
 
-import java.net.InetAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.UnknownHostException;
@@ -186,7 +185,8 @@ public class MaxMindMinFraudService {
             logger.debugf("Performing fraud check for IP: %s, Email: %s", ipAddress, email != null ? email : "none");
 
             // Build the device object
-            Device.Builder deviceBuilder = new Device.Builder(InetAddress.getByName(ipAddress));
+            // Literal only: never resolve the client address through DNS
+            Device.Builder deviceBuilder = new Device.Builder(IpAddressUtils.parseLiteral(ipAddress));
 
             if (deviceSessionId != null && !deviceSessionId.isEmpty()) {
                 deviceBuilder.sessionId(deviceSessionId);
