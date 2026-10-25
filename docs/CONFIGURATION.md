@@ -262,6 +262,13 @@ Action to take for high risk logins (score > High Threshold).
 5. Login succeeds
 ```
 
+With the [MFA Enforcer](#mfa-enforcer-configuration) in the flow, a user with a second factor is
+asked for it (left), and a user without one is refused rather than offered to set one up (right):
+
+| User with a second factor | User without one |
+|---|---|
+| ![After a medium-risk score, a user with an authenticator app is asked for a one-time code](images/sign-in/step-up-otp.png) | ![After a medium-risk score, a user without a second factor is told MFA is required](images/sign-in/mfa-required.png) |
+
 #### BLOCK
 
 - Login is immediately denied
@@ -274,9 +281,11 @@ Action to take for high risk logins (score > High Threshold).
 **User Experience**:
 User sees an error page with message:
 ```
-Login attempt blocked due to suspicious activity.
+Login denied due to suspicious activity.
 Please contact support if you believe this is an error.
 ```
+
+![A sign-in denied because minFraud scored it high risk](images/sign-in/blocked-high-risk.png)
 
 ### Configuration Examples
 
@@ -339,6 +348,10 @@ High Risk Action: ALLOW
 5. Keycloak sends session ID to minFraud API
 6. MaxMind matches device to historical data
 7. Risk score adjusted based on device reputation
+
+While device.js runs, after the password, users see a short verification page:
+
+![The Verifying Security page that runs MaxMind's device script after the password](images/sign-in/device-tracking.png)
 
 ### Enabling Device Tracking
 
@@ -482,6 +495,8 @@ Determines behavior when MaxMind API call fails.
 - Error is logged
 - Fraud check stored with error message
 
+![A sign-in refused because minFraud couldn't be reached and the failure mode is FAIL_CLOSED](images/sign-in/fail-closed.png)
+
 **Use for**:
 - Production environments
 - High-security applications
@@ -624,6 +639,10 @@ All fraud check events include the following custom detail keys:
    - **Type**: Filter by LOGIN, LOGIN_ERROR
    - **Date Range**: Last hour, day, week, or custom range
 3. Click on any event to expand and view all details
+
+| Allowed (LOGIN) | Blocked (LOGIN_ERROR) |
+|---|---|
+| ![A LOGIN event with the minFraud risk score, level and decision](images/events/login-allowed.png) | ![A LOGIN_ERROR event for a blocked high-risk sign-in](images/events/login-blocked.png) |
 
 ### Event Storage vs Database Storage
 
@@ -941,6 +960,8 @@ auth_method: maxmind_mfa_enforcer
 ```
 
 **Note**: The `maxmind_mfa_enforcer_mode` field indicates whether the challenge originated from pre-auth or post-auth fraud detection.
+
+![A LOGIN event from the MFA enforcer for a challenged sign-in it let through](images/events/login-challenged.png)
 
 ### Error Messages
 

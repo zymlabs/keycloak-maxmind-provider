@@ -23,16 +23,21 @@ A Keycloak authentication extension that integrates MaxMind minFraud fraud detec
 
 ## Screenshots
 
+More in the [screens gallery](docs/screens.md): the setup steps, every page users can see, and the events.
+
 ### User Experience During Login
-![Device Fingerprinting Screen](docs/maxmind-minfraud-login-device-fingerprinting.png)
+![The Verifying Security page that runs MaxMind's device script after the password](docs/images/sign-in/device-tracking.png)
 *Users see this security verification screen during fraud detection when device tracking is enabled*
 
+![A sign-in denied because minFraud scored it high risk](docs/images/sign-in/blocked-high-risk.png)
+*A high-risk sign-in is blocked (with the default BLOCK action for high risk)*
+
 ### Event Monitoring
-![Keycloak Events Dashboard](docs/maxmind-minfraud-user-events.png)
+![A LOGIN event in the admin console with the minFraud risk score, level and decision](docs/images/events/login-allowed.png)
 *Fraud check events displayed in Keycloak Admin Console with detailed MaxMind risk assessment data including risk score, level, and decision*
 
 ### Configuration
-![Provider Configuration](docs/maxmind-minfraud-browser-flow-provider-config.png)
+![The MaxMind minFraud step's settings in the admin console](docs/images/setup/minfraud-config.png)
 *MaxMind minFraud authenticator configuration screen showing all available settings including API credentials, risk thresholds, IP filtering, and actions*
 
 ## Prerequisites
@@ -119,6 +124,12 @@ The database table `maxmind_minfraud_check` should be automatically created via 
 4. Add the **MaxMind minFraud** execution after username/password authentication
 5. Set the requirement to **REQUIRED** or **CONDITIONAL**
 6. Click the **Actions** (⚙️) button → **Config**
+
+![Adding the MaxMind minFraud step to the forms of a copy of the browser flow](docs/images/setup/add-step.png)
+
+The finished flow, with the MFA enforcer after minFraud (see [MFA Enforcement](#mfa-enforcement-for-suspicious-logins)):
+
+![A copy of the browser flow with MaxMind minFraud and the MFA enforcer after Username Password Form](docs/images/setup/browser-flow.png)
 
 ### 3. Authenticator Configuration
 
@@ -239,6 +250,8 @@ MaxMind minFraud → Username/Password → Pre-Auth Correlator → MFA Enforcer 
 
 **Setup:** Place MaxMind authenticator before username/password in your flow, and add the Pre-Auth Correlator after login for audit trail correlation.
 
+![A pre-authentication flow: MaxMind minFraud before Username Password Form, then the correlator and the MFA enforcer](docs/images/setup/pre-auth-flow.png)
+
 ### MFA Enforcement for Suspicious Logins
 
 The **MaxMind MFA Enforcer** authenticator provides an additional security layer when fraud is detected. It prevents attackers from bypassing security by setting up MFA during a fraudulent login attempt.
@@ -258,6 +271,10 @@ The **MaxMind MFA Enforcer** authenticator provides an additional security layer
 - Provides clear audit trail of blocked attempts
 
 **Setup:** Add the "MaxMind MFA Enforcer" authenticator to your flow between the fraud detector and MFA step (works with both pre-auth and post-auth modes). See [CONFIGURATION.md](docs/CONFIGURATION.md#mfa-enforcer-configuration) for detailed setup and configuration options.
+
+| User with a second factor | User without one |
+|---|---|
+| ![After a medium-risk score, a user with an authenticator app is asked for a one-time code](docs/images/sign-in/step-up-otp.png) | ![After a medium-risk score, a user without a second factor is told MFA is required](docs/images/sign-in/mfa-required.png) |
 
 ## Querying Fraud Check Results
 
@@ -348,6 +365,8 @@ All fraud checks create user events with the following custom detail keys:
 2. Filter by user, date range, or event type
 3. Click on an event to view all details including fraud check information
 
+![A LOGIN_ERROR event for a blocked high-risk sign-in, with its minFraud details](docs/images/events/login-blocked.png)
+
 ### Querying Events from Database
 
 Events are stored in the `event_entity` table:
@@ -425,6 +444,10 @@ The `docker-compose.yml` includes:
 - Automatic extension deployment to `/opt/keycloak/providers/`
 - A minFraud stub for the e2e tests (`--profile e2e`)
 
+Host ports can be moved with `KEYCLOAK_PORT`, `KEYCLOAK_DEBUG_PORT`, `POSTGRES_PORT` and
+`MAXMIND_STUB_PORT` (in the environment or a `.env` file next to `docker-compose.yml`, which the
+e2e tests read too), e.g. to run a second stack alongside with its own `COMPOSE_PROJECT_NAME`.
+
 Output: `target/zymlabs-maxmind-provider.jar`
 
 #### Testing
@@ -466,6 +489,9 @@ admin API on each run, with its authenticators pointed at the stub via the **API
 It covers low/medium/high risk, MFA enforcement with and without OTP, FAIL_OPEN/FAIL_CLOSED, the IP
 blocklist, device tracking fallback, and pre-auth checks with correlation. CI runs it on Keycloak
 24.0.0, 25.0.6 and 26.7.4.
+
+The docs screenshots ([gallery](docs/screens.md)) come from the same stack: `npm run docs-screens:docker`
+in `e2e/` retakes them. See [CONTRIBUTING.md](CONTRIBUTING.md#docs-screenshots).
 
 **Test Coverage:**
 - RiskEvaluationTest (~25 tests): Risk scoring and threshold logic

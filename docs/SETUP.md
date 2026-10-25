@@ -229,6 +229,8 @@ Run fraud check **after** username/password authentication (knows user identity)
 4. Set the requirement to **REQUIRED**
 5. Use the up/down arrows to position it **after** "Username Password Form"
 
+![Adding the MaxMind minFraud step: the extension's three steps in the Add execution dialog](images/setup/add-step.png)
+
 Your flow should look like:
 ```
 Browser with MaxMind
@@ -268,6 +270,10 @@ Browser with MaxMind
     └── OTP Form (CONDITIONAL)
 ```
 
+With the MFA enforcer from Step 5 added, in Keycloak 26:
+
+![A pre-authentication flow: MaxMind minFraud before Username Password Form, then the correlator and the MFA enforcer](images/setup/pre-auth-flow.png)
+
 **Benefits**:
 - Blocks malicious IPs before they can enter credentials
 - Prevents credential enumeration attacks
@@ -298,6 +304,8 @@ Browser with MaxMind
 2. Click **Config**
 3. Enter an alias: "maxmind-config"
 4. Fill in the configuration:
+
+![The MaxMind minFraud step's settings](images/setup/minfraud-config.png)
 
 #### Basic Configuration
 
@@ -379,6 +387,10 @@ Browser with MaxMind
     └── OTP Form (CONDITIONAL)
 ```
 
+In Keycloak 26, whose browser flow also has an Organization sub-flow and a conditional 2FA sub-flow:
+
+![A copy of the browser flow with MaxMind minFraud and the MFA enforcer after Username Password Form](images/setup/browser-flow.png)
+
 **Pre-Auth Flow** (less useful for CHALLENGE):
 ```
 Browser with MaxMind
@@ -407,6 +419,8 @@ Browser with MaxMind
 
 5. Click **Save**
 
+![The MaxMind MFA Enforcer step's settings](images/setup/mfa-enforcer-config.png)
+
 **How it works:**
 - When MaxMind detects medium-risk activity (CHALLENGE):
   - Users **with** MFA configured → Allowed to proceed to MFA verification
@@ -419,6 +433,12 @@ Browser with MaxMind
 1. Navigate to **Authentication** → **Bindings**
 2. Set **Browser Flow** to "Browser with MaxMind"
 3. Click **Save**
+
+The flow list then shows the copy as the realm's browser flow. A flow can also be bound to single
+clients (the client's **Advanced** tab, **Authentication flow overrides**), as the pre-authentication
+copy is here:
+
+![The Authentication flows list: the copy with minFraud is used as the browser flow](images/setup/authentication-flows.png)
 
 ## Testing the Integration
 
@@ -493,6 +513,8 @@ The extension logs fraud checks to both the database and Keycloak's event system
    - `maxmind_minfraud_service_level`: SCORE
    - `auth_method`: maxmind_minfraud
 
+![A LOGIN event with its minFraud details](images/events/login-allowed.png)
+
 #### Verify Events in Database
 
 ```sql
@@ -536,6 +558,12 @@ To test blocking:
 3. Login should be blocked
 4. Reset configuration to original values
 
+What users see for each outcome is in the [screens gallery](screens.md#sign-in): a blocked
+high-risk sign-in, the second-factor challenge, the MFA enforcer refusing a user without a second
+factor, a blocklisted address and FAIL_CLOSED.
+
+![A sign-in denied because minFraud scored it high risk](images/sign-in/blocked-high-risk.png)
+
 ### Step 7: Test IP Filtering (Optional)
 
 #### Test IP Allowlist
@@ -562,6 +590,8 @@ To test blocking:
 3. Click **Save**
 4. Try to log in
 5. Login should be blocked with an error message
+
+   ![A sign-in from a blocklisted address](images/sign-in/ip-blocked.png)
 6. Check the database:
    ```sql
    SELECT * FROM maxmind_minfraud_check
