@@ -1,0 +1,168 @@
+name: Docs screenshots
+
+# Retakes the docs screenshots (docs/images, its manifest.json and the docs/screens.md gallery) with
+# e2e/docs/screens.spec.ts, against the docker compose stack and the minFraud stub (no MaxMind
+# account involved), and uploads them as the docs-screenshots artifact. On develop it then proposes
+# them as one PR, from the chore/docs-screenshots branch, whenever they differ from what's committed.
+
+on:
+  push:
+    branches: [develop]
+    # What can change a screen: the extension (templates, messages, settings), the stack and the
+    # Keycloak version it runs, the minFraud stub, and the capture itself
+    paths:
+      - 'src/main/**'
+      - 'pom.xml'
+      - 'docker-compose.yml'
+      - 'e2e/docs/**'
+      - 'e2e/stub/**'
+      - 'e2e/tests/helpers.ts'
+      - 'e2e/global-setup.ts'
+      - 'e2e/playwright.config.ts'
+      - 'e2e/package.json'
+      - 'e2e/package-lock.json'
+      - '.github/workflows/docs-screenshots.yml'
+  workflow_dispatch:
+  # Changes to the capture are checked on their PR (capture only, nothing is proposed)
+  pull_request:
+    paths:
+      - 'e2e/docs/**'
+      - '.github/workflows/docs-screenshots.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '17'
+  JAVA_DISTRIBUTION: 'temurin'
+  NODE_VERSION: '22'
+
+jobs:
+  capture:
+    name: Capture
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up JDK ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v6
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: ${{ env.JAVA_DISTRIBUTION }}
+          cache: maven
+
+      - name: Build the provider JAR
+        run: mvn -B clean package -DskipTests
+
+      # The Keycloak version is docker-compose.yml's default, so the shots show what a new install gets
+      - name: Start Keycloak and the minFraud stub
+        run: docker compose --profile e2e up -d --wait --wait-timeout 300 keycloak maxmind-stub
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install dependencies
+        working-directory: e2e
+        run: npm ci
+
+      # In the Playwright image of the version e2e/package.json pins (mcr.microsoft.com/playwright),
+      # as `npm run docs-screens:docker` does locally, so fonts and anti-aliasing are the same everywhere
+      - name: Capture the screenshots
+        working-directory: e2e
+        run: npm run docs-screens:docker
+
+      - name: Upload the screenshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-screenshots
+          # Stored relative to docs/: images/… and screens.md
+          path: |
+            docs/images
+            docs/screens.md
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Keycloak and stub logs
+        if: failure()
+        run: docker compose --profile e2e logs keycloak maxmind-stub
+
+      - name: Upload the Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs-screenshots-playwright-results
+          path: e2e/test-results/
+          retention-days: 7
+
+  propose:
+    # Puts the screenshots on chore/docs-screenshots, rebuilt from develop each run so it holds one
+    # commit, and opens (or updates) its PR to develop. Nothing happens when they match develop.
+    # Only from develop, and only this job can write.
+    #
+    # The PR is opened with GITHUB_TOKEN, and events caused by GITHUB_TOKEN don't start other
+    # workflows: CI doesn't run on that PR by itself. Close and reopen it, or push to its branch,
+    # to get checks.
+    name: Propose as a PR
+    needs: [capture]
+    if: github.ref == 'refs/heads/develop' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      BRANCH: chore/docs-screenshots
+    steps:
+      - name: Checkout develop
+        uses: actions/checkout@v7
+
+      # Replaces the folder, so a screenshot the spec no longer takes is removed too
+      - name: Put the new screenshots in place
+        run: rm -rf docs/images docs/screens.md
+
+      - name: Download the screenshots
+        uses: actions/download-artifact@v8
+        with:
+          name: docs-screenshots
+          path: docs
+
+      - name: Commit, push and open or update the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git switch -C "$BRANCH"
+          git add -A docs/images docs/screens.md
+          if git diff --cached --quiet; then
+            echo "The screenshots on develop are up to date: no PR." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+            -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m "docs(screens): retake the docs screenshots"
+          git push --force origin "$BRANCH"
+
+          run_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          body=$(printf '%s\n' \
+            "Docs screenshots retaken from ${GITHUB_SHA::7} by the [Docs screenshots workflow](${run_url})." \
+            "" \
+            "Review the changed images (docs/images) and the gallery (docs/screens.md) before merging." \
+            "This branch is rebuilt from develop on every run, so it always holds one commit." \
+            "" \
+            "Opened with GITHUB_TOKEN, so CI doesn't run on this PR by itself: close and reopen it to run the checks.")
+          pr=$(gh pr list --head "$BRANCH" --base develop --state open --json url --jq '.[0].url // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --body "$body"
+          else
+            pr=$(gh pr create --base develop --head "$BRANCH" \
+              --title "docs(screens): retake the docs screenshots" --body "$body")
+          fi
+          echo "Screenshots PR: $pr" >> "$GITHUB_STEP_SUMMARY"
