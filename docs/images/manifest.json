@@ -1,0 +1,122 @@
+[
+  {
+    "section": "Setup",
+    "title": "Authentication flows",
+    "caption": "A copy of the browser flow with minFraud is the realm's browser flow; a pre-authentication copy is bound to one client.",
+    "file": "docs/images/setup/authentication-flows.png",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "section": "Setup",
+    "title": "The browser flow with minFraud",
+    "caption": "Post-authentication: minFraud checks the sign-in after the password, and the MFA enforcer acts on a challenge.",
+    "file": "docs/images/setup/browser-flow.png",
+    "width": 1440,
+    "height": 1798
+  },
+  {
+    "section": "Setup",
+    "title": "Adding the minFraud step",
+    "caption": "The extension adds three steps: MaxMind minFraud, the MFA enforcer and the pre-authentication correlator.",
+    "file": "docs/images/setup/add-step.png",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "section": "Setup",
+    "title": "minFraud settings",
+    "caption": "Account, service level, device tracking, IP lists, risk thresholds and actions, failure mode and timeouts.",
+    "file": "docs/images/setup/minfraud-config.png",
+    "width": 1440,
+    "height": 1937
+  },
+  {
+    "section": "Setup",
+    "title": "MFA enforcer settings",
+    "caption": "Which credentials count as a second factor when minFraud asks for one.",
+    "file": "docs/images/setup/mfa-enforcer-config.png",
+    "width": 1440,
+    "height": 900
+  },
+  {
+    "section": "Setup",
+    "title": "The pre-authentication flow",
+    "caption": "Pre-authentication: minFraud checks the address before the sign-in form, and the correlator links the check to the user.",
+    "file": "docs/images/setup/pre-auth-flow.png",
+    "width": 1440,
+    "height": 1904
+  },
+  {
+    "section": "Sign-in",
+    "title": "Device tracking",
+    "caption": "With device tracking on, MaxMind's device script runs for a moment after the password.",
+    "file": "docs/images/sign-in/device-tracking.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Sign-in",
+    "title": "Medium risk: second factor",
+    "caption": "A medium score with CHALLENGE: users with a second factor are asked for it.",
+    "file": "docs/images/sign-in/step-up-otp.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Sign-in",
+    "title": "Medium risk: no second factor",
+    "caption": "The MFA enforcer stops users without one, so they can't set one up during a suspicious sign-in.",
+    "file": "docs/images/sign-in/mfa-required.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Sign-in",
+    "title": "High risk: blocked",
+    "caption": "A high score with BLOCK denies the sign-in.",
+    "file": "docs/images/sign-in/blocked-high-risk.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Sign-in",
+    "title": "Blocklisted address",
+    "caption": "Addresses on the IP blocklist are denied without asking minFraud.",
+    "file": "docs/images/sign-in/ip-blocked.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Sign-in",
+    "title": "minFraud unavailable (FAIL_CLOSED)",
+    "caption": "When minFraud can't be reached, FAIL_CLOSED denies the sign-in (FAIL_OPEN lets it through).",
+    "file": "docs/images/sign-in/fail-closed.png",
+    "width": 1280,
+    "height": 800
+  },
+  {
+    "section": "Events",
+    "title": "An allowed sign-in",
+    "caption": "A LOGIN event with minFraud's risk score, risk level and decision, its request id and the service level.",
+    "file": "docs/images/events/login-allowed.png",
+    "width": 1440,
+    "height": 1346
+  },
+  {
+    "section": "Events",
+    "title": "A challenged sign-in",
+    "caption": "A medium-risk sign-in (CHALLENGE) that the MFA enforcer let through to the user's second factor.",
+    "file": "docs/images/events/login-challenged.png",
+    "width": 1440,
+    "height": 1481
+  },
+  {
+    "section": "Events",
+    "title": "A blocked sign-in",
+    "caption": "A LOGIN_ERROR event for a high-risk sign-in that minFraud's score blocked.",
+    "file": "docs/images/events/login-blocked.png",
+    "width": 1440,
+    "height": 1346
+  }
+]
