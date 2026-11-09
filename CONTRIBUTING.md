@@ -303,9 +303,11 @@ address (`198.51.100.24`, sent as `X-Forwarded-For`, which the compose stack tru
 events at fixed times with stable stand-ins for their ids, and hides the focus ring, caret and
 hover state.
 
-Retake them against the running stack, in the Playwright image that matches `e2e/package.json`
-(fonts and anti-aliasing then match CI byte for byte, also on Apple silicon, where the image runs
-emulated):
+Retake them against the running stack, in the Playwright image that matches `e2e/package.json`,
+so fonts and anti-aliasing match CI's. On Apple silicon it runs natively, as arm64: about half the
+shots then come out a colour step of 1/255 apart from CI's amd64 ones, but a shot that looks the
+same as the committed one (no pixel further apart than a threshold of 0.02) keeps the committed
+bytes, so only screens that really changed show up in `git status`:
 
 ```bash
 mvn package -DskipTests

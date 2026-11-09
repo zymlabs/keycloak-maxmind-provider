@@ -11,6 +11,9 @@
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "@types/node": "^22.20.4"
+    "@types/node": "^22.20.4",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^7.2.0",
+    "pngjs": "^7.0.0"
   }
 }
