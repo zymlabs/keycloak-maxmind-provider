@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { expect, Locator, Page } from '@playwright/test';
+import pixelmatch from 'pixelmatch';
+import { PNG } from 'pngjs';
 import { adminToken } from '../global-setup';
 import { KEYCLOAK_URL } from '../playwright.config';
 
@@ -54,16 +56,31 @@ export async function shot(page: Page, folder: string, name: string, entry: Omit
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.waitForTimeout(300);
   const restore = fit ? await fitViewport(page) : async () => undefined;
-  await page.screenshot({ path, animations: 'disabled', caret: 'hide' });
+  const taken = await page.screenshot({ animations: 'disabled', caret: 'hide' });
   await restore();
+  // A shot that looks the same as the one committed keeps its bytes, so a run on another machine
+  // or architecture (natively on Apple silicon, where colours can land a step of 1/255 apart)
+  // changes only what really changed.
+  const previous = existsSync(path) ? readFileSync(path) : undefined;
+  const png = previous && looksTheSame(previous, taken) ? previous : taken;
+  writeFileSync(path, png);
 
-  const png = readFileSync(path);
   const file = relative(REPO, path).split('\\').join('/');
   const record: Entry = { ...entry, file, width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
   const at = entries.findIndex((e) => e.file === file);
   if (at >= 0) entries[at] = record;
   else entries.push(record);
   writeFileSync(ENTRIES, JSON.stringify(entries));
+}
+
+/**
+ * Whether two PNGs look the same: the same size, and no pixel apart by more than a threshold of
+ * 0.02, which a step of 1/255 in a colour is well within.
+ */
+function looksTheSame(a: Buffer, b: Buffer) {
+  const [x, y] = [PNG.sync.read(a), PNG.sync.read(b)];
+  if (x.width !== y.width || x.height !== y.height) return false;
+  return pixelmatch(x.data, y.data, undefined, x.width, x.height, { threshold: 0.02 }) === 0;
 }
 
 /**
